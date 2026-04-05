@@ -1,0 +1,30 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // Debug current file
+            "name": "Python: Current File (uv venv)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                // Optional: expose env for uv-aware tools
+                "UV_PROJECT_ENVIRONMENT": "${workspaceFolder}\\.venv"
+            }
+        },
+        {
+            // Debug as module, e.g. src.main
+            "name": "Python: Run src.main (uv venv)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.main",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "UV_PROJECT_ENVIRONMENT": "${workspaceFolder}\\.venv"
+            }
+        }
+    ]
+}
