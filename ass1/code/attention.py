@@ -117,13 +117,17 @@ def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask):
 
 
 class CausalSelfAttention(nn.Module):
-    def __init__(self, embed_dim, n_heads, max_context_len):
+    def __init__(self, embed_dim, n_heads, max_context_len, efficient = False):
         super().__init__()
         assert embed_dim % n_heads == 0
         # the linear layers used for k, q, v computations:
         # each linear is for a different head, but for all of k, q and v for this head.
-        self.kqv_matrices = nn.Parameter(create_kqv_matrix_efficient(embed_dim, n_heads))
-        self.kqv_bias = nn.Parameter(torch.zeros(n_heads, 3 * embed_dim // n_heads, device=DEVICE))
+        self.efficient = efficient
+        if efficient:
+            self.kqv_matrices = nn.Parameter(create_kqv_matrix_efficient(embed_dim, n_heads))
+            self.kqv_bias = nn.Parameter(torch.zeros(n_heads, 3 * embed_dim // n_heads, device=DEVICE))
+        else:
+            self.kqv_matrices = nn.ModuleList([create_kqv_matrix(embed_dim, n_heads) for _ in range(n_heads)])
         # For use in the causal part.  "register_buffer" is used to store a tensor which is fixed but is not a parameter of the model.
         # You can then access it with: self.mask
         mask = create_causal_mask(embed_dim, n_heads, max_context_len)
@@ -132,5 +136,10 @@ class CausalSelfAttention(nn.Module):
         self.embed_dim = embed_dim
 
     def forward(self, x):
-        sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, self.mask)
+        seq_len = x.size(1)
+        cur_mask = self.mask[:seq_len, :seq_len]
+        if self.efficient:
+            sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, cur_mask)
+        else:
+            sa = multi_head_attention_layer(x, self.kqv_matrices, cur_mask)
         return sa

@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from pathlib import Path
 import torch
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -13,7 +13,8 @@ if __name__ == "__main__":
 
     seq_len = 128
     batch_size = 64
-    data_path = "../data/en/"
+    dirpath = Path(__file__).parent
+    data_path = dirpath / ".."/ "data" / "en/"
     n_layers = 6
     n_heads = 6
     embed_size = 192
@@ -37,6 +38,7 @@ if __name__ == "__main__":
         tokenizer.vocab_size(),
         mlp_hidden_size,
         with_residuals=True,
+        efficient=True
     ).to(DEVICE)
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95])
