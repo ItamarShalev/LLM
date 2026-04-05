@@ -1,44 +1,78 @@
+import re
 from torch import nn
 import torch
 import torch.nn.functional as F
 import attention
 import mlp
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class TransformerDecoderBlock(nn.Module):
-    def __init__(self, n_heads: int, embed_size: int, mlp_hidden_size: int, max_context_len, with_residuals: bool = False):
+    def __init__(self, n_heads: int, embed_size: int, mlp_hidden_size: int, max_context_len, with_residuals: bool = False, pre_norm: bool = True):
         super().__init__()
         self.causal_attention = attention.CausalSelfAttention(embed_size, n_heads, max_context_len)
-        self.mlp = mlp.MLP(embed_size, mlp_hidden_size)
-        self.layer_norm_1 = nn.LayerNorm(embed_size)
-        self.layer_norm_2 = nn.LayerNorm(embed_size)
+        self.mlp = mlp.MLP(embed_size, mlp_hidden_size).to(DEVICE)
+        self.layer_norm_1 = nn.LayerNorm(embed_size).to(DEVICE)
+        self.layer_norm_2 = nn.LayerNorm(embed_size).to(DEVICE)
         self.with_residuals = with_residuals
+        self.pre_norm = pre_norm
 
-    def forward(self, inputs):
+    def _pre_norm_forward(self, inputs):
         if self.with_residuals:
-            raise Exception("Not implemented")
-            # TODO add residuals support.
+            # DONE add residuals support.
+            attention_out = self.causal_attention(self.layer_norm_1(inputs))
+            x = inputs + attention_out
+            mlp_out = self.mlp(self.layer_norm_2(x))
+            x = x + mlp_out
         else:
             x = inputs
             x = self.layer_norm_1(x)
             x = self.causal_attention(x)
             x = self.layer_norm_2(x)
             x = self.mlp(x)
-            return x
+        return x
+    
+    def _post_norm_forward(self, inputs):
+        if self.with_residuals:
+            # DONE add residuals support.
+            attention_out = self.causal_attention(inputs)
+            x = inputs + attention_out
+            x = self.layer_norm_1(x)
+            mlp_out = self.mlp(x)
+            x = x + mlp_out
+            x = self.layer_norm_2(x)
+        else:
+            x = inputs
+            x = self.causal_attention(x)
+            x = self.layer_norm_1(x)
+            x = self.mlp(x)
+            x = self.layer_norm_2(x)
+        return x
+
+    def forward(self, inputs):
+        if self.pre_norm:
+            x = self._pre_norm_forward(inputs)
+        else:
+            x = self._post_norm_forward(inputs)
+        return x
 
 class Embed(nn.Module):
     def __init__(self, vocab_size: int, embed_size: int, max_context_len):
         super().__init__()
-        self.token_embeddings = nn.Embedding(0, 0) # TODO set the right values
-        self.position_embeddings = nn.Embedding(0, 0) # TODO set the right values
+        self.token_embeddings = nn.Embedding(vocab_size, embed_size).to(DEVICE)
+        self.position_embeddings = nn.Embedding(max_context_len, embed_size).to(DEVICE)
         self.max_context_len = max_context_len
 
     def forward(self, x):
-        raise Exception("Not implemented") # TODO implement.
         # x has the shape (b x n) where b is batch dimension and n is sequence length.
         # each item is an int, indicating a vocabulary item.
         # The output should be of shape (b x n x d), where d is the embedding dimension.
         #tok_embeddings = 
         #pos_embeddings = ...
+        b, n = x.size()
+        pos_indices = torch.arange(n, device=DEVICE)
+        tok_embeddings = self.token_embeddings(x)
+        pos_embeddings = self.position_embeddings(pos_indices)
         return tok_embeddings + pos_embeddings
 
 
@@ -75,7 +109,7 @@ class TransformerLM(nn.Module):
 
     def init_weights(self):
         # initialize weights
-        # TODO implement initialization logic for embeddings and linear layers.
+        # DONE implement initialization logic for embeddings and linear layers.
         # The code break down the parameters by type (layer-norm, linear, embedding),
         # but can also condition on individual names, for example by checking pn.endswith(...).
         for pn, p in self.named_parameters():
@@ -83,13 +117,16 @@ class TransformerLM(nn.Module):
                 torch.nn.init.zeros_(p.bias)
                 torch.nn.init.ones_(p.weight)
             elif isinstance(p, nn.Linear):
-                # TODO initialize p.weight and p.bias (if it is not None).
+                # DONE initialize p.weight and p.bias (if it is not None).
                 # You can look at initializers in torch.nn.init
-                pass
+                torch.nn.init.kaiming_normal_(p.weight, mode='fan_in', nonlinearity='relu')
+                if p.bias is not None:
+                    torch.nn.init.zeros_(p.bias)
             elif isinstance(p, nn.Embedding):
-                # TODO initialize p.weight and p.bias (if it is not None).
+                # DONE initialize p.weight and p.bias (if it is not None).
                 # You can look at initializers in torch.nn.init
-                pass
+                torch.nn.init.normal_(p.weight, mean=0.0, std=0.02)
+                
 
 
     def sample_continuation(self, prefix: list[int], max_tokens_to_generate: int) -> list[int]:
@@ -114,4 +151,3 @@ class TransformerLM(nn.Module):
         # Temperature should be the temperature in which you sample.
         # TopK indicates that we don't sample from the entire distribution, but only from the top k scoring tokens
         # for the given position.
-
