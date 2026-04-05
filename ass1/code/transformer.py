@@ -11,9 +11,9 @@ class TransformerDecoderBlock(nn.Module):
     def __init__(self, n_heads: int, embed_size: int, mlp_hidden_size: int, max_context_len, with_residuals: bool = False, pre_norm: bool = True):
         super().__init__()
         self.causal_attention = attention.CausalSelfAttention(embed_size, n_heads, max_context_len)
-        self.mlp = mlp.MLP(embed_size, mlp_hidden_size).to(DEVICE)
-        self.layer_norm_1 = nn.LayerNorm(embed_size).to(DEVICE)
-        self.layer_norm_2 = nn.LayerNorm(embed_size).to(DEVICE)
+        self.mlp = mlp.MLP(embed_size, mlp_hidden_size)
+        self.layer_norm_1 = nn.LayerNorm(embed_size)
+        self.layer_norm_2 = nn.LayerNorm(embed_size)
         self.with_residuals = with_residuals
         self.pre_norm = pre_norm
 
@@ -59,8 +59,8 @@ class TransformerDecoderBlock(nn.Module):
 class Embed(nn.Module):
     def __init__(self, vocab_size: int, embed_size: int, max_context_len):
         super().__init__()
-        self.token_embeddings = nn.Embedding(vocab_size, embed_size).to(DEVICE)
-        self.position_embeddings = nn.Embedding(max_context_len, embed_size).to(DEVICE)
+        self.token_embeddings = nn.Embedding(vocab_size, embed_size)
+        self.position_embeddings = nn.Embedding(max_context_len, embed_size)
         self.max_context_len = max_context_len
 
     def forward(self, x):

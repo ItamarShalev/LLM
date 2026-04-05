@@ -7,10 +7,9 @@ import math
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-
 def create_kqv_matrix(input_vector_dim, n_heads = 1):
-    return nn.Linear(input_vector_dim, input_vector_dim * 3, device=DEVICE) # DONE fill in the correct dimensions
+    output_vector_dim = input_vector_dim * 3 // n_heads
+    return nn.Linear(input_vector_dim, output_vector_dim, device=DEVICE) # DONE fill in the correct dimensions
 
 def kqv(x, linear):
     B, N, D = x.size()

@@ -18,7 +18,7 @@ def test_create_kqv_matrix():
     # Verify the input and output dimensions. 
     # Output should be 3x the input dimension to accommodate Q, K, and V.
     assert layer.in_features == input_dim, f"Expected in_features to be {input_dim}."
-    assert layer.out_features == input_dim * 3, f"Expected out_features to be {input_dim * 3}."
+    assert layer.out_features == input_dim * 3 // n_heads, f"Expected out_features to be {input_dim * 3 // n_heads}."
     
     print("test_create_kqv_matrix passed successfully!")
 

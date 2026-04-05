@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == "__main__":
     import lm
@@ -36,7 +37,7 @@ if __name__ == "__main__":
         tokenizer.vocab_size(),
         mlp_hidden_size,
         with_residuals=True,
-    )
+    ).to(DEVICE)
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95])
 
@@ -50,6 +51,9 @@ if __name__ == "__main__":
             num_batches = num_batches + 1
 
             batch_x, batch_y = lm.batch_to_labeled_samples(batch)
+
+            batch_x = batch_x.to(DEVICE)
+            batch_y = batch_y.to(DEVICE)
 
             logits = model(batch_x)
 
