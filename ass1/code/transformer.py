@@ -126,6 +126,8 @@ class TransformerLM(nn.Module):
                 # DONE initialize p.weight and p.bias (if it is not None).
                 # You can look at initializers in torch.nn.init
                 torch.nn.init.normal_(p.weight, mean=0.0, std=0.02)
+            elif 'kqv_matrices' in pn:
+                torch.nn.init.normal_(p, mean=0.0, std=0.02)
                 
 
 
@@ -137,7 +139,7 @@ class TransformerLM(nn.Module):
                 if len(feed_to_lm) > self.max_context_len:
                     # if we have more tokens than context length, trim it to context length.
                     feed_to_lm = feed_to_lm[-self.max_context_len:]
-                logits = self(torch.tensor([feed_to_lm], dtype=torch.int32))
+                logits = self(torch.tensor([feed_to_lm], dtype=torch.int32, device=DEVICE))
                 logits_for_last_token = logits[0][-1]
                 distribution_for_last_token = F.softmax(logits_for_last_token)
                 sampled_token = torch.multinomial(distribution_for_last_token, num_samples=1)

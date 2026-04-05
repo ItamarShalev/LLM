@@ -9,7 +9,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def create_kqv_matrix(input_vector_dim, n_heads = 1):
     output_vector_dim = input_vector_dim * 3 // n_heads
-    return nn.Linear(input_vector_dim, output_vector_dim, device=DEVICE) # DONE fill in the correct dimensions
+    return nn.Linear(input_vector_dim, output_vector_dim) # DONE fill in the correct dimensions
 
 def kqv(x, linear):
     B, N, D = x.size()
@@ -75,6 +75,46 @@ def multi_head_attention_layer(x, kqv_matrices, mask):
     assert sa.size() == x.size()
     return sa
 
+def create_kqv_matrix_efficient(input_vector_dim, n_heads = 1):
+    return torch.zeros((n_heads, input_vector_dim, input_vector_dim * 3 // n_heads), device=DEVICE)
+
+def attention_scores_efficient(a, b):
+
+    D = a.size(-1)
+    # DONE compute A (remember: we are computing *scaled* dot product attention. don't forget the scaling.
+    # (can do it in 1 or 2 lines.)
+    A = (a @ b.transpose(-2, -1)) / math.sqrt(D)
+    return A
+
+def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask):
+    B, N, D = x.size()
+    n_heads = kqv_tensor.size(0)
+    
+    # 1. Projection: Keep the 'n' dimension!
+    # (B, N, D) and (H, D, F) -> (B, H, N, F)
+    kqv_out = torch.einsum('bnd, hdf -> bhnf', x, kqv_tensor)
+    
+    # 2. Add Bias: Match (B, H, N, F) by viewing bias as (1, H, 1, F)
+    kqv_out = kqv_out + kqv_bias.view(1, n_heads, 1, -1)
+    
+    # 3. Chunk into K, Q, V (each is B, H, N, F/3)
+    k, q, v = kqv_out.chunk(3, dim=-1)
+    
+    # 4. Compute Attention
+    att = attention_scores_efficient(k, q)
+    
+    # If mask is 2D (N, N), masked_fill handles the broadcast to (B, H, N, N) automatically
+    sa = self_attention(v, att, mask)
+    
+    # 5. The "Reconstruct" Step
+    # sa is (B, H, N, D_head). 
+    # We need (B, N, H, D_head) before we view it as (B, N, D)
+    sa = sa.transpose(1, 2).contiguous().view(B, N, D)
+
+    assert sa.size() == x.size()
+    return sa
+    
+
 
 class CausalSelfAttention(nn.Module):
     def __init__(self, embed_dim, n_heads, max_context_len):
@@ -82,7 +122,8 @@ class CausalSelfAttention(nn.Module):
         assert embed_dim % n_heads == 0
         # the linear layers used for k, q, v computations:
         # each linear is for a different head, but for all of k, q and v for this head.
-        self.kqv_matrices = nn.ModuleList([create_kqv_matrix(embed_dim, n_heads) for i in range(n_heads)])
+        self.kqv_matrices = nn.Parameter(create_kqv_matrix_efficient(embed_dim, n_heads))
+        self.kqv_bias = nn.Parameter(torch.zeros(n_heads, 3 * embed_dim // n_heads, device=DEVICE))
         # For use in the causal part.  "register_buffer" is used to store a tensor which is fixed but is not a parameter of the model.
         # You can then access it with: self.mask
         mask = create_causal_mask(embed_dim, n_heads, max_context_len)
@@ -91,5 +132,5 @@ class CausalSelfAttention(nn.Module):
         self.embed_dim = embed_dim
 
     def forward(self, x):
-        sa = multi_head_attention_layer(x, self.kqv_matrices, self.mask)
+        sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, self.mask)
         return sa

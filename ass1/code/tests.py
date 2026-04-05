@@ -174,3 +174,43 @@ def test_causal_self_attention():
         print("test_causal_self_attention passed successfully!")
     else:
         print("causal_self_attention is not implemented yet. Skipping test.")
+
+
+def test_create_kqv_matrix_efficient():
+    input_dim = 8
+    n_heads = 2
+
+    kqv_tensor = attention.create_kqv_matrix_efficient(input_vector_dim=input_dim, n_heads=n_heads)
+
+    expected_shape = (n_heads, input_dim, input_dim * 3 // n_heads)
+    assert kqv_tensor.size() == expected_shape, f"Expected shape {expected_shape}, got {kqv_tensor.size()}"
+    assert kqv_tensor.device.type == DEVICE.type, f"Expected tensor on {DEVICE.type}, got {kqv_tensor.device}"
+    assert torch.allclose(kqv_tensor, torch.zeros(expected_shape, device=DEVICE)), "Expected zero-initialized tensor"
+
+
+def test_multi_head_attention_layer_efficient_matches_reference():
+    torch.manual_seed(0)
+
+    B, N, D = 2, 5, 8
+    n_heads = 2
+
+    x = torch.rand(B, N, D, device=DEVICE)
+    mask = torch.tril(torch.ones(N, N, device=DEVICE))
+
+    kqv_matrices = []
+    out_per_head = D * 3 // n_heads
+    for _ in range(n_heads):
+        kqv_matrices.append(nn.Linear(D, out_per_head).to(DEVICE))
+
+    kqv_tensor = torch.empty(n_heads, D, out_per_head, device=DEVICE)
+    kqv_bias = torch.empty(n_heads, out_per_head, device=DEVICE)
+
+    for head_idx, linear in enumerate(kqv_matrices):
+        kqv_tensor[head_idx] = linear.weight.transpose(0, 1)
+        kqv_bias[head_idx] = linear.bias
+
+    sa_reference = attention.multi_head_attention_layer(x, kqv_matrices, mask)
+    sa_efficient = attention.multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask)
+
+    assert sa_efficient.size() == sa_reference.size(), "Efficient output shape mismatch"
+    assert torch.allclose(sa_efficient, sa_reference, atol=1e-6), "Efficient output does not match reference implementation"
