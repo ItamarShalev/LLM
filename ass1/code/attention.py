@@ -75,43 +75,60 @@ def multi_head_attention_layer(x, kqv_matrices, mask):
     assert sa.size() == x.size()
     return sa
 
-def create_kqv_matrix_efficient(input_vector_dim, n_heads = 1):
+def create_kqv_matrix_efficient(input_vector_dim: int, n_heads: int = 1) -> torch.Tensor:
+    """Implementation of effecient kqv matrix generation given heads, returned tensor is of size (n_head, input_vector_dim, input_vector_dim*3/n_heads)
+
+    Args:
+        input_vector_dim (int): the input dimension
+        n_heads (int, optional): the number of heads. Defaults to 1.
+
+    Returns:
+        torch.Tensor: the kqv matrix for efficient multi-head attention, of size (n_head, input_vector_dim, input_vector_dim*3/n_heads)
+    """
     return torch.zeros((n_heads, input_vector_dim, input_vector_dim * 3 // n_heads), device=DEVICE)
 
-def attention_scores_efficient(a, b):
+def attention_scores_efficient(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Implementation of efficient attention score calculation for multi-head attention, where a and b are of size (B, H, N, D_head) and the output is of size (B, H, N, N)
+
+    Args:
+        a (torch.Tensor): the first input tensor, of size (B, H, N, D_head)
+        b (torch.Tensor): the second input tensor, of size (B, H, N, D_head)
+
+    Returns:
+        torch.Tensor: the attention scores, of size (B, H, N, N)
+    """
 
     D = a.size(-1)
     # DONE compute A (remember: we are computing *scaled* dot product attention. don't forget the scaling.
     # (can do it in 1 or 2 lines.)
-    A = (a @ b.transpose(-2, -1)) / math.sqrt(D)
+    A = (a @ b.transpose(-2, -1)) / math.sqrt(D) #batch matrix multiplication, with scaling
     return A
 
 def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask):
     B, N, D = x.size()
+
     n_heads = kqv_tensor.size(0)
     
-    # 1. Projection: Keep the 'n' dimension!
-    # (B, N, D) and (H, D, F) -> (B, H, N, F)
+    # compute k, q, v for all heads in a single operation, using kqv_tensor and kqv_bias.
     kqv_out = torch.einsum('bnd, hdf -> bhnf', x, kqv_tensor)
     
-    # 2. Add Bias: Match (B, H, N, F) by viewing bias as (1, H, 1, F)
+    # Add the bias term to kqv_out.
     kqv_out = kqv_out + kqv_bias.view(1, n_heads, 1, -1)
     
-    # 3. Chunk into K, Q, V (each is B, H, N, F/3)
+    # Now split kqv_out into k, q, and v. The resulting tensors should each be of shape (B, H, N, D_head), where D_head = D // n_heads.
     k, q, v = kqv_out.chunk(3, dim=-1)
     
-    # 4. Compute Attention
+    # Compute attention scores using the efficient attention_scores_efficient function.
     att = attention_scores_efficient(k, q)
-    
-    # If mask is 2D (N, N), masked_fill handles the broadcast to (B, H, N, N) automatically
+
+    # Compute the self-attention output using the self_attention function.
     sa = self_attention(v, att, mask)
-    
-    # 5. The "Reconstruct" Step
-    # sa is (B, H, N, D_head). 
-    # We need (B, N, H, D_head) before we view it as (B, N, D)
+  
+    # Finally, we need to combine the outputs of the different heads back into a single tensor of shape (B, N, D).
     sa = sa.transpose(1, 2).contiguous().view(B, N, D)
 
     assert sa.size() == x.size()
+    
     return sa
     
 
