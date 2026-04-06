@@ -97,7 +97,11 @@ def attention_scores_efficient(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor
     Returns:
         torch.Tensor: the attention scores, of size (B, H, N, N)
     """
-
+    B1, H1, N1, D1 = a.size()
+    B2, H2, N2, D2 = b.size()
+    assert B1 == B2
+    assert H1 == H2
+    assert D1 == D2
     D = a.size(-1)
     # DONE compute A (remember: we are computing *scaled* dot product attention. don't forget the scaling.
     # (can do it in 1 or 2 lines.)
@@ -128,7 +132,7 @@ def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask):
     sa = sa.transpose(1, 2).contiguous().view(B, N, D)
 
     assert sa.size() == x.size()
-    
+
     return sa
     
 
