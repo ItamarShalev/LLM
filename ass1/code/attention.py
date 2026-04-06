@@ -146,7 +146,7 @@ class CausalSelfAttention(nn.Module):
         self.efficient = efficient
         if efficient:
             self.kqv_matrices = nn.Parameter(create_kqv_matrix_efficient(embed_dim, n_heads))
-            self.kqv_bias = nn.Parameter(torch.zeros(n_heads, 3 * embed_dim // n_heads, device=DEVICE))
+            self.kqv_bias = nn.Parameter(torch.zeros(n_heads, 3 * embed_dim // n_heads))
         else:
             self.kqv_matrices = nn.ModuleList([create_kqv_matrix(embed_dim, n_heads) for _ in range(n_heads)])
         # For use in the causal part.  "register_buffer" is used to store a tensor which is fixed but is not a parameter of the model.
