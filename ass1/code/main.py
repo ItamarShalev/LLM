@@ -89,5 +89,11 @@ if __name__ == "__main__":
                     print("")
             if num_batches % save_checkpoint_every == 0:
                 checkpoint_file = checkpoint_path / f"checkpoint_{efficient=}_{num_batches}.pt"
-                torch.save(model.state_dict(), checkpoint_file)
+                state = {
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "num_batches": num_batches,
+                    "loss": loss.item(),
+                }
+                torch.save(state, checkpoint_file)
                 print(f"Saved checkpoint to {checkpoint_file}")
