@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import torch
+import time
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == "__main__":
@@ -13,8 +14,13 @@ if __name__ == "__main__":
 
     seq_len = 128
     batch_size = 64
-    dirpath = Path(__file__).parent
-    data_path = dirpath / ".."/ "data" / "en/"
+    dirpath = Path(__file__).parent.parent
+    data_path = dirpath / "data" / "en"
+    checkpoint_path = dirpath / "checkpoints"  
+    checkpoint_path.mkdir(exist_ok=True, parents=True)
+    efficient = True
+    save_checkpoint_every = 1000
+
     n_layers = 6
     n_heads = 6
     embed_size = 192
@@ -38,7 +44,7 @@ if __name__ == "__main__":
         tokenizer.vocab_size(),
         mlp_hidden_size,
         with_residuals=True,
-        efficient=True
+        efficient=efficient
     ).to(DEVICE)
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95])
@@ -47,8 +53,11 @@ if __name__ == "__main__":
 
     num_batches = 0
     while True:
+        start_time = time.time()
         for batch in data.batch_items(data_iter, batch_size):
             if num_batches >= num_batches_to_train:
+                end = time.time()
+                print(f"Finished training {num_batches} batches in {end - start_time:.2f} seconds.")    
                 break
 
             batch_x, batch_y = lm.batch_to_labeled_samples(batch)
@@ -78,3 +87,7 @@ if __name__ == "__main__":
                         model.train()
                         print(f"Model sample: '''{sampled}'''")
                     print("")
+            if num_batches % save_checkpoint_every == 0:
+                checkpoint_file = checkpoint_path / f"checkpoint_{efficient=}_{num_batches}.pt"
+                torch.save(model.state_dict(), checkpoint_file)
+                print(f"Saved checkpoint to {checkpoint_file}")
