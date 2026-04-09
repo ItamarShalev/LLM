@@ -50,16 +50,11 @@ if __name__ == "__main__":
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95])
 
     model.train()
-
+    is_finished = False
     num_batches = 0
-    while True:
+    while not is_finished:
         start_time = time.time()
         for batch in data.batch_items(data_iter, batch_size):
-            if num_batches >= num_batches_to_train:
-                end = time.time()
-                print(f"Finished training {num_batches} batches in {end - start_time:.2f} seconds.")    
-                break
-
             batch_x, batch_y = lm.batch_to_labeled_samples(batch)
 
             batch_x = batch_x.to(DEVICE)
@@ -97,3 +92,8 @@ if __name__ == "__main__":
                 }
                 torch.save(state, checkpoint_file)
                 print(f"Saved checkpoint to {checkpoint_file}")
+            if num_batches >= num_batches_to_train:
+                end = time.time()
+                print(f"Finished training {num_batches} batches in {end - start_time:.2f} seconds.")    
+                is_finished = True
+                break
