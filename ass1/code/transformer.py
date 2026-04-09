@@ -11,6 +11,7 @@ class TransformerDecoderBlock(nn.Module):
     def __init__(self, n_heads: int, embed_size: int, mlp_hidden_size: int, max_context_len, with_residuals: bool = False, pre_norm: bool = True, efficient: bool = False):
         super().__init__()
         self.causal_attention = attention.CausalSelfAttention(embed_size, n_heads, max_context_len, efficient)
+        self.dropout = nn.Dropout(0.1)
         self.mlp = mlp.MLP(embed_size, mlp_hidden_size)
         self.layer_norm_1 = nn.LayerNorm(embed_size)
         self.layer_norm_2 = nn.LayerNorm(embed_size)
@@ -21,6 +22,7 @@ class TransformerDecoderBlock(nn.Module):
         if self.with_residuals:
             # DONE add residuals support.
             attention_out = self.causal_attention(self.layer_norm_1(inputs))
+            x = self.dropout(attention_out)
             x = inputs + attention_out
             mlp_out = self.mlp(self.layer_norm_2(x))
             x = x + mlp_out
@@ -28,6 +30,7 @@ class TransformerDecoderBlock(nn.Module):
             x = inputs
             x = self.layer_norm_1(x)
             x = self.causal_attention(x)
+            x = self.dropout(x)
             x = self.layer_norm_2(x)
             x = self.mlp(x)
         return x
@@ -35,7 +38,8 @@ class TransformerDecoderBlock(nn.Module):
     def _post_norm_forward(self, inputs):
         if self.with_residuals:
             # DONE add residuals support.
-            attention_out = self.causal_attention(inputs)
+            attention_out = self.causal_attention(input)
+            self.dropout(attention_out)
             x = inputs + attention_out
             x = self.layer_norm_1(x)
             mlp_out = self.mlp(x)
@@ -44,6 +48,7 @@ class TransformerDecoderBlock(nn.Module):
         else:
             x = inputs
             x = self.causal_attention(x)
+            self.dropout(x)
             x = self.layer_norm_1(x)
             x = self.mlp(x)
             x = self.layer_norm_2(x)
@@ -90,6 +95,7 @@ class TransformerLM(nn.Module):
             ):
         super().__init__()
         self.embed = Embed(vocab_size, embed_size, max_context_len)
+        self.dropout = nn.Dropout(0.1)
         self.layers = nn.ModuleList([TransformerDecoderBlock(n_heads, embed_size, mlp_hidden_size, max_context_len, with_residuals, efficient) for _ in range(n_layers)])
         self.layer_norm = nn.LayerNorm(embed_size)
         self.word_prediction = nn.Linear(embed_size, vocab_size)
@@ -102,6 +108,7 @@ class TransformerLM(nn.Module):
 
     def forward(self, inputs):
         x = self.embed(inputs)
+        x = self.dropout(x)
         for layer in self.layers:
             x = layer(x)
         x = self.layer_norm(x)
@@ -130,7 +137,6 @@ class TransformerLM(nn.Module):
             elif 'kqv_matrices' in pn:
                 torch.nn.init.normal_(p, mean=0.0, std=0.02)
                 
-
 
     def sample_continuation(self, prefix: list[int], max_tokens_to_generate: int) -> list[int]:
         feed_to_lm = prefix[:]

@@ -85,7 +85,7 @@ def create_kqv_matrix_efficient(input_vector_dim: int, n_heads: int = 1) -> torc
     Returns:
         torch.Tensor: the kqv matrix for efficient multi-head attention, of size (n_head, input_vector_dim, input_vector_dim*3/n_heads)
     """
-    return torch.zeros((n_heads, input_vector_dim, input_vector_dim * 3 // n_heads), device=DEVICE)
+    return torch.zeros((n_heads, input_vector_dim, input_vector_dim * 3 // n_heads))
 
 def attention_scores_efficient(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """Implementation of efficient attention score calculation for multi-head attention, where a and b are of size (B, H, N, D_head) and the output is of size (B, H, N, N)
