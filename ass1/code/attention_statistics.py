@@ -2,12 +2,20 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 
 
 dirpath = Path(__file__).parent.parent
 
-heat_map_path = dirpath / "heat_maps"
+graphs_path = dirpath / "graphs"
+graphs_path.mkdir(exist_ok=True, parents=True)
+
+heat_map_path = graphs_path / "heat_maps"
 heat_map_path.mkdir(exist_ok=True, parents=True)
+previous_token_head_checker_path = dirpath / "previous_token_head_checker"
+previous_token_head_checker_path.mkdir(exist_ok=True, parents=True)
+induction_heads_checker_path = dirpath / "induction_heads_checker"
+induction_heads_checker_path.mkdir(exist_ok=True, parents=True)
 
 
 def produce_heat_map(attention_heads, letters: str, layer_name: str = ""):
@@ -44,3 +52,92 @@ def produce_heat_map(attention_heads, letters: str, layer_name: str = ""):
     heat_map_file = heat_map_path / f"heat_map_{layer_name}_{letters}.png"
     fig.savefig(heat_map_file)
 
+
+def previous_token_head_checker(attention_head: torch.Tensor, layer: str = ""):
+    """creates a plot of the average score per head of previous token score, this will tell us if a head acts as a copy mechanism
+
+    Args:
+        attention_head (torch.tensor): a tensor of shape (B, H, N, N) containing the attention scores for a specific layer across all attention heads, where B is the batch size, H is the number of heads, and N is the sequence length
+        layer (str, optional): the name of the layer for which the plot is being produced, used for the title of the plot. Defaults to "".
+    """
+
+    # Use only the subdiagonal entries (i, i-1), then average across positions and batch.
+    if attention_head.size(-1) < 2:
+        raise ValueError("Sequence length must be at least 2 to compute previous-token attention.")
+
+    prev_token_scores = (
+        attention_head[:, :, 1:, :-1]
+        .diagonal(dim1=-2, dim2=-1)
+        .mean(dim=-1)
+        .mean(dim=0)
+    )  # shape: (H,)
+    plt.figure(figsize=(10, 5))
+    plt.bar(range(len(prev_token_scores)), prev_token_scores.cpu().numpy())
+    plt.xlabel("Head")
+    plt.ylim(0, 1)
+    plt.ylabel("Average previous token score")
+    plt.title(f"Average previous token score per head for layer {layer}")
+    plt.xticks(range(len(prev_token_scores)))
+    path = previous_token_head_checker_path / f"previous_token_head_checker_{layer}.png"
+    plt.savefig(path)
+    plt.show()
+
+def begin_of_sequence_head_checker(attention_head: torch.Tensor, layer: str = ""):
+    """returns the average score of the first token of a sequence across the attention scores of all tokens
+       per layer per head, this will tell us if a head attends to the beginning of sequence token
+       we look at the last few tokens, since they have the full sequence available to attend to the beginning of sequence token, and we average across them and across the batch dimension
+
+    Args:
+        attention_head (torch.Tensor): a tensor of shape (B, H, N, N) containing the attention scores for a specific layer across all attention heads, where B is the batch size, H is the number of heads, and N is the sequence length
+        layer (str, optional): the name of the layer for which the plot is being produced, used for the title of the plot. Defaults to "".
+
+    """
+
+    bos_token_scores = attention_head[:, :, -3:, 0].mean(dim=-1).mean(dim=0)  # shape: (H,) #we take the last 3 tokens, as they have more context to attend
+    plt.figure(figsize=(10, 5))
+    plt.bar(range(len(bos_token_scores)), bos_token_scores.cpu().numpy())
+    plt.xlabel("Head")
+    plt.ylim(0, 1)
+    plt.ylabel("Average BOS token score")
+    plt.title(f"Average BOS token score per head for layer {layer}")
+    plt.xticks(range(len(bos_token_scores)))
+    path = previous_token_head_checker_path / f"begin_of_sequence_head_checker_{layer}.png"
+    plt.savefig(path)
+    plt.show()
+
+
+def induction_heads_checker(attention_head: torch.Tensor, layer: str = "", sentences: list[str] | None = None):
+    """returns the average score that a token give to the same token that occured before it in a sequence
+    ie AB  AB we want to see if the second B attends to the first B and by how much
+
+    Args:
+        attention_head (torch.Tensor): tensor of shape (B, H, N, N) containing the attention scores for a specific layer across all attention heads, where B is the batch size, H is the number of heads, and N is the sequence length
+        layer (str, optional): the name of the layer for which the plot is being produced, used for the title of the plot. Defaults to "".
+        sentences (list[str], optional): a list of sentences for which to analyze induction heads, will help determine which letters to look on which letters. Defaults to [].
+    """
+
+    batch_size, _, seq_len, seq_len_k = attention_head.shape
+
+    repeated_token_scores = []
+    for b, sentence in enumerate(sentences):
+        tokens = list(sentence)
+
+        last_position_by_token: dict[str, int] = {}
+        for i, token in enumerate(tokens):
+            if token in last_position_by_token:
+                prev_i = last_position_by_token[token]
+                repeated_token_scores.append(attention_head[b, :, i, prev_i])
+            last_position_by_token[token] = i
+
+    induction_scores = torch.stack(repeated_token_scores, dim=0).mean(dim=0)  # shape: (H,)
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(range(len(induction_scores)), induction_scores.detach().cpu().numpy())
+    plt.xlabel("Head")
+    plt.ylim(0, 1)
+    plt.ylabel("Average induction score")
+    plt.title(f"Average induction score per head for layer {layer}")
+    plt.xticks(range(len(induction_scores)))
+    path = induction_heads_checker_path / f"induction_heads_checker_{layer}.png"
+    plt.savefig(path)
+    plt.show()
