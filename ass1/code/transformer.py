@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 import attention
 import mlp
+from hooks import attention_hook
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -91,12 +92,16 @@ class TransformerLM(nn.Module):
             vocab_size: int,
             mlp_hidden_size: int,
             with_residuals: bool,
-            efficient: bool = False
+            efficient: bool = False,
+            register_hooks: bool = False
             ):
         super().__init__()
         self.embed = Embed(vocab_size, embed_size, max_context_len)
         self.dropout = nn.Dropout(0.1)
         self.layers = nn.ModuleList([TransformerDecoderBlock(n_heads, embed_size, mlp_hidden_size, max_context_len, with_residuals, pre_norm=True, efficient=efficient) for _ in range(n_layers)])
+        if register_hooks:
+            for i, layer in enumerate(self.layers):
+                layer.causal_attention.attention_identity.register_forward_hook(attention_hook(f"layer_{i}_att"))
         self.layer_norm = nn.LayerNorm(embed_size)
         self.word_prediction = nn.Linear(embed_size, vocab_size)
         self.max_context_len = max_context_len
@@ -154,7 +159,7 @@ class TransformerLM(nn.Module):
                 feed_to_lm.append(sampled_token)
         return generated
 
-    def better_sample_continuation(self, prefix: list[int], max_tokens_to_generate: int, temperature: float, topK: int, interpret: bool = False, var: list = None) -> list[int]:
+    def better_sample_continuation(self, prefix: list[int], max_tokens_to_generate: int, temperature: float, topK: int) -> list[int]:
         # TODO implement this.
         # Temperature should be the temperature in which you sample.
         # TopK indicates that we don't sample from the entire distribution, but only from the top k scoring tokens
@@ -166,7 +171,7 @@ class TransformerLM(nn.Module):
                 if len(feed_to_lm) > self.max_context_len:
                     # if we have more tokens than context length, trim it to context length.
                     feed_to_lm = feed_to_lm[-self.max_context_len:]
-                logits = self(torch.tensor([feed_to_lm], dtype=torch.int32, device=DEVICE), interpret, var)
+                logits = self(torch.tensor([feed_to_lm], dtype=torch.int32, device=DEVICE))
                 logits_for_last_token = logits[0][-1]
                 # DONE implement temperature and topK sampling.
                 distribution_for_last_token = F.softmax(logits_for_last_token / temperature)

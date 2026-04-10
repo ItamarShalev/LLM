@@ -40,12 +40,14 @@ def create_causal_mask(embed_dim, n_heads, max_context_len):
     mask = torch.tril(mask) # DONE replace this line with the creation of a causal mask.
     return mask
 
-def self_attention(v, A, mask = None):
+def self_attention(v, A, mask = None, identity_layer: nn.Identity | None = None):
     # DONE compute sa (corresponding to y in the assignemnt text).
     # This should take very few lines of code.
     # As usual, the dimensions of v and of sa are (b x n x d).
     if mask is not None:
         A = A.masked_fill(mask == 0, float('-inf'))
+    if identity_layer is not None:
+        A = identity_layer(A)
     attention_weights = torch.softmax(A, dim=-1)
     sa = attention_weights @ v
     return sa
@@ -108,7 +110,7 @@ def attention_scores_efficient(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor
     A = (a @ b.transpose(-2, -1)) / math.sqrt(D) #batch matrix multiplication, with scaling
     return A
 
-def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask):
+def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask, identity_layer: nn.Identity | None = None):
     B, N, D = x.size()
 
     n_heads = kqv_tensor.size(0)
@@ -126,7 +128,7 @@ def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask):
     att = attention_scores_efficient(k, q)
 
     # Compute the self-attention output using the self_attention function.
-    sa = self_attention(v, att, mask)
+    sa = self_attention(v, att, mask, identity_layer)
   
     # Finally, we need to combine the outputs of the different heads back into a single tensor of shape (B, N, D).
     sa = sa.transpose(1, 2).contiguous().view(B, N, D)
@@ -155,12 +157,13 @@ class CausalSelfAttention(nn.Module):
         self.register_buffer("mask", mask)
         self.n_heads = n_heads
         self.embed_dim = embed_dim
+        self.attention_identity = nn.Identity() #place for hook to extract the attention scores for interpretation
 
     def forward(self, x):
         seq_len = x.size(1)
         cur_mask = self.mask[:seq_len, :seq_len]
         if self.efficient:
-            sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, cur_mask)
+            sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, cur_mask, self.attention_identity)
         else:
             sa = multi_head_attention_layer(x, self.kqv_matrices, cur_mask)
         return sa
