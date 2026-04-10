@@ -18,10 +18,10 @@ class TransformerDecoderBlock(nn.Module):
         self.with_residuals = with_residuals
         self.pre_norm = pre_norm
 
-    def _pre_norm_forward(self, inputs, interpret = False, var = None):
+    def _pre_norm_forward(self, inputs):
         if self.with_residuals:
             # DONE add residuals support.
-            attention_out = self.causal_attention(self.layer_norm_1(inputs), interpret, var)
+            attention_out = self.causal_attention(self.layer_norm_1(inputs))
             x = self.dropout(attention_out)
             x = inputs + attention_out
             mlp_out = self.mlp(self.layer_norm_2(x))
@@ -29,16 +29,16 @@ class TransformerDecoderBlock(nn.Module):
         else:
             x = inputs
             x = self.layer_norm_1(x)
-            x = self.causal_attention(x, interpret, var)
+            x = self.causal_attention(x)
             x = self.dropout(x)
             x = self.layer_norm_2(x)
             x = self.mlp(x)
         return x
     
-    def _post_norm_forward(self, inputs, interpret = False, var = None):
+    def _post_norm_forward(self, inputs):
         if self.with_residuals:
             # DONE add residuals support.
-            attention_out = self.causal_attention(inputs, interpret, var)
+            attention_out = self.causal_attention(inputs)
             attention_out = self.dropout(attention_out)
             x = inputs + attention_out
             x = self.layer_norm_1(x)
@@ -47,18 +47,18 @@ class TransformerDecoderBlock(nn.Module):
             x = self.layer_norm_2(x)
         else:
             x = inputs
-            x = self.causal_attention(x, interpret, var)
+            x = self.causal_attention(x)
             x =self.dropout(x)
             x = self.layer_norm_1(x)
             x = self.mlp(x)
             x = self.layer_norm_2(x)
         return x
 
-    def forward(self, inputs, interpret = False, var = None):
+    def forward(self, inputs):
         if self.pre_norm:
-            x = self._pre_norm_forward(inputs, interpret, var)
+            x = self._pre_norm_forward(inputs)
         else:
-            x = self._post_norm_forward(inputs, interpret, var)
+            x = self._post_norm_forward(inputs)
         return x
 
 class Embed(nn.Module):
@@ -106,11 +106,11 @@ class TransformerLM(nn.Module):
         n_params = sum(p.numel() for p in self.parameters())
         print("Parameter count: %.2fM" % (n_params/1e6,))
 
-    def forward(self, inputs, interpret = False, var = None):
+    def forward(self, inputs):
         x = self.embed(inputs)
         x = self.dropout(x)
         for layer in self.layers:
-            x = layer(x, interpret, var)
+            x = layer(x)
         x = self.layer_norm(x)
         logits = self.word_prediction(x)
         return logits

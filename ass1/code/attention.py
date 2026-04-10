@@ -108,7 +108,7 @@ def attention_scores_efficient(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor
     A = (a @ b.transpose(-2, -1)) / math.sqrt(D) #batch matrix multiplication, with scaling
     return A
 
-def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask, interpret=False, var=None):
+def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask):
     B, N, D = x.size()
 
     n_heads = kqv_tensor.size(0)
@@ -124,8 +124,6 @@ def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask, interpre
     
     # Compute attention scores using the efficient attention_scores_efficient function.
     att = attention_scores_efficient(k, q)
-    if interpret:
-        var.append(att.detach().cpu())
 
     # Compute the self-attention output using the self_attention function.
     sa = self_attention(v, att, mask)
@@ -158,11 +156,11 @@ class CausalSelfAttention(nn.Module):
         self.n_heads = n_heads
         self.embed_dim = embed_dim
 
-    def forward(self, x, interpret=False, var=None):
+    def forward(self, x):
         seq_len = x.size(1)
         cur_mask = self.mask[:seq_len, :seq_len]
         if self.efficient:
-            sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, cur_mask, interpret, var)
+            sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, cur_mask)
         else:
             sa = multi_head_attention_layer(x, self.kqv_matrices, cur_mask)
         return sa
