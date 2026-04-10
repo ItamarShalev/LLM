@@ -18,10 +18,10 @@ class TransformerDecoderBlock(nn.Module):
         self.with_residuals = with_residuals
         self.pre_norm = pre_norm
 
-    def _pre_norm_forward(self, inputs):
+    def _pre_norm_forward(self, inputs, interpret = False, var = None):
         if self.with_residuals:
             # DONE add residuals support.
-            attention_out = self.causal_attention(self.layer_norm_1(inputs))
+            attention_out = self.causal_attention(self.layer_norm_1(inputs), interpret, var)
             x = self.dropout(attention_out)
             x = inputs + attention_out
             mlp_out = self.mlp(self.layer_norm_2(x))
@@ -29,17 +29,17 @@ class TransformerDecoderBlock(nn.Module):
         else:
             x = inputs
             x = self.layer_norm_1(x)
-            x = self.causal_attention(x)
+            x = self.causal_attention(x, interpret, var)
             x = self.dropout(x)
             x = self.layer_norm_2(x)
             x = self.mlp(x)
         return x
     
-    def _post_norm_forward(self, inputs):
+    def _post_norm_forward(self, inputs, interpret = False, var = None):
         if self.with_residuals:
             # DONE add residuals support.
-            attention_out = self.causal_attention(input)
-            self.dropout(attention_out)
+            attention_out = self.causal_attention(inputs, interpret, var)
+            attention_out = self.dropout(attention_out)
             x = inputs + attention_out
             x = self.layer_norm_1(x)
             mlp_out = self.mlp(x)
@@ -47,18 +47,18 @@ class TransformerDecoderBlock(nn.Module):
             x = self.layer_norm_2(x)
         else:
             x = inputs
-            x = self.causal_attention(x)
-            self.dropout(x)
+            x = self.causal_attention(x, interpret, var)
+            x =self.dropout(x)
             x = self.layer_norm_1(x)
             x = self.mlp(x)
             x = self.layer_norm_2(x)
         return x
 
-    def forward(self, inputs):
+    def forward(self, inputs, interpret = False, var = None):
         if self.pre_norm:
-            x = self._pre_norm_forward(inputs)
+            x = self._pre_norm_forward(inputs, interpret, var)
         else:
-            x = self._post_norm_forward(inputs)
+            x = self._post_norm_forward(inputs, interpret, var)
         return x
 
 class Embed(nn.Module):
@@ -96,7 +96,7 @@ class TransformerLM(nn.Module):
         super().__init__()
         self.embed = Embed(vocab_size, embed_size, max_context_len)
         self.dropout = nn.Dropout(0.1)
-        self.layers = nn.ModuleList([TransformerDecoderBlock(n_heads, embed_size, mlp_hidden_size, max_context_len, with_residuals, efficient) for _ in range(n_layers)])
+        self.layers = nn.ModuleList([TransformerDecoderBlock(n_heads, embed_size, mlp_hidden_size, max_context_len, with_residuals, pre_norm=True, efficient=efficient) for _ in range(n_layers)])
         self.layer_norm = nn.LayerNorm(embed_size)
         self.word_prediction = nn.Linear(embed_size, vocab_size)
         self.max_context_len = max_context_len
@@ -106,11 +106,11 @@ class TransformerLM(nn.Module):
         n_params = sum(p.numel() for p in self.parameters())
         print("Parameter count: %.2fM" % (n_params/1e6,))
 
-    def forward(self, inputs):
+    def forward(self, inputs, interpret = False, var = None):
         x = self.embed(inputs)
         x = self.dropout(x)
         for layer in self.layers:
-            x = layer(x)
+            x = layer(x, interpret, var)
         x = self.layer_norm(x)
         logits = self.word_prediction(x)
         return logits
@@ -154,7 +154,7 @@ class TransformerLM(nn.Module):
                 feed_to_lm.append(sampled_token)
         return generated
 
-    def better_sample_continuation(self, prefix: list[int], max_tokens_to_generate: int, temperature: float, topK: int) -> list[int]:
+    def better_sample_continuation(self, prefix: list[int], max_tokens_to_generate: int, temperature: float, topK: int, interpret: bool = False, var: list = None) -> list[int]:
         # TODO implement this.
         # Temperature should be the temperature in which you sample.
         # TopK indicates that we don't sample from the entire distribution, but only from the top k scoring tokens
@@ -166,7 +166,7 @@ class TransformerLM(nn.Module):
                 if len(feed_to_lm) > self.max_context_len:
                     # if we have more tokens than context length, trim it to context length.
                     feed_to_lm = feed_to_lm[-self.max_context_len:]
-                logits = self(torch.tensor([feed_to_lm], dtype=torch.int32, device=DEVICE))
+                logits = self(torch.tensor([feed_to_lm], dtype=torch.int32, device=DEVICE), interpret, var)
                 logits_for_last_token = logits[0][-1]
                 # DONE implement temperature and topK sampling.
                 distribution_for_last_token = F.softmax(logits_for_last_token / temperature)
@@ -175,3 +175,4 @@ class TransformerLM(nn.Module):
                 sampled_token = topk_indices[sampled_index_in_topk]
                 generated.append(sampled_token)
                 feed_to_lm.append(sampled_token)
+        return generated

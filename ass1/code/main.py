@@ -22,6 +22,8 @@ def main(lang: Literal["en", "he"]):
     efficient = True
     save_checkpoint_every = 1000
 
+    word = "hello" if lang == "en" else "שלום"
+
     n_layers = 6
     n_heads = 6
     embed_size = 192
@@ -77,7 +79,7 @@ def main(lang: Literal["en", "he"]):
                     for _ in range(1):
                         model.eval()
                         sampled = tokenizer.detokenize(
-                            model.sample_continuation(tokenizer.tokenize("Hello"), 500)
+                            model.sample_continuation(tokenizer.tokenize(word), 500)
                         )
                         model.train()
                         print(f"Model sample: '''{sampled}'''")

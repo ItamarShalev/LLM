@@ -70,13 +70,13 @@ class RandomOrderDataIterator:
 def load_data(path: str) -> [CharTokenizer, list[list[int]]]:
     tokenizer = CharTokenizer()
     for fname in glob.glob(f"{path}/*.txt"):
-        with open(fname) as fh:
+        with open(fname, encoding="utf-8") as fh:
             text = fh.read()
             tokenizer.train(text)
 
     data: list[list[int]] = []
     for fname in glob.glob(f"{path}/*.txt"):
-        with open(fname) as fh:
+        with open(fname, encoding="utf-8") as fh:
             text = fh.read()
             data.append(tokenizer.tokenize(text))
 
