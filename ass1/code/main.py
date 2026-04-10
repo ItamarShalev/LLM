@@ -79,7 +79,7 @@ def main(lang: Literal["en", "he"]):
                     for _ in range(1):
                         model.eval()
                         sampled = tokenizer.detokenize(
-                            model.sample_continuation(tokenizer.tokenize(word), 500)
+                            model.better_sample_continuation(tokenizer.tokenize(word), max_tokens_to_generate=1, temperature=0.5, topK=5)
                         )
                         model.train()
                         print(f"Model sample: '''{sampled}'''")

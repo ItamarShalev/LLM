@@ -3,6 +3,7 @@ from pathlib import Path
 from transformer import TransformerLM
 import data
 from hooks import attention_hook, ATTENTION_HEADS
+from attention_statistics import produce_heat_map 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -21,7 +22,6 @@ def main():
 
     tokenizer, _ = data.load_data(dirpath / "data" / "en")
 
-
     model: torch.nn.Module = TransformerLM(
         n_layers=n_layers,
         n_heads=n_heads,
@@ -33,18 +33,21 @@ def main():
         efficient=efficient,    
         register_hooks=True
     ).to(DEVICE)
+    model.eval()
 
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, weights_only=False, map_location=DEVICE)
     model.load_state_dict(checkpoint["model_state_dict"])
     print(f"Loaded checkpoint from {checkpoint_path}.")
 
-    sampled = tokenizer.detokenize(
-        model.better_sample_continuation(tokenizer.tokenize("Hello"), 500, temperature=0.5, topK=5)
-    )
-    print(f"Model sample: '''{sampled}'''")
-    print("Attention heads shapes:")
-    for name, att in ATTENTION_HEADS.items():
-        print(f"{name}: {att.shape}")
+    words = "quick brown fox jumps over the lazy dog".split()
+    tokenized_words = [tokenizer.tokenize(word) for word in words]
+
+    for word, tokenized_word in zip(words, tokenized_words):
+
+        model.better_sample_continuation(tokenized_word, max_tokens_to_generate=1, temperature=0.5, topK=5)
+        for layer_name, attention_heads in ATTENTION_HEADS.items():
+            produce_heat_map(attention_heads.squeeze(), word, layer_name=layer_name)   
+
 
 
 if __name__ == "__main__":

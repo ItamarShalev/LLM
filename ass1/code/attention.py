@@ -46,9 +46,9 @@ def self_attention(v, A, mask = None, identity_layer: nn.Identity | None = None)
     # As usual, the dimensions of v and of sa are (b x n x d).
     if mask is not None:
         A = A.masked_fill(mask == 0, float('-inf'))
-    if identity_layer is not None:
-        A = identity_layer(A)
     attention_weights = torch.softmax(A, dim=-1)
+    if identity_layer is not None:
+        attention_weights = identity_layer(attention_weights)
     sa = attention_weights @ v
     return sa
 
