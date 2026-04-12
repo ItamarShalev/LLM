@@ -17,19 +17,19 @@ def main(lang: Literal["en", "he"]):
     batch_size = 64
     dirpath = Path(__file__).parent.parent
     data_path = dirpath / "data" / lang
-    checkpoint_path = dirpath / "checkpoints" / lang
+    checkpoint_path = dirpath / "new_checkpoints" / lang
     checkpoint_path.mkdir(exist_ok=True, parents=True)
     efficient = True
     save_checkpoint_every = 1000
 
     word = "hello" if lang == "en" else "שלום"
 
-    n_layers = 6
-    n_heads = 6
-    embed_size = 192
+    n_layers = 7 #6
+    n_heads = 8 #6
+    embed_size = 256 #192
     mlp_hidden_size = embed_size * 4
 
-    learning_rate = 5e-4
+    learning_rate = 5e-4 
     gradient_clipping = 1.0
 
     num_batches_to_train = 50000
@@ -51,6 +51,7 @@ def main(lang: Literal["en", "he"]):
     ).to(DEVICE)
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95])
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_batches_to_train)
 
     model.train()
     num_batches = 0
@@ -71,6 +72,8 @@ def main(lang: Literal["en", "he"]):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping)
             optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
 
             num_batches += 1
             if num_batches % 10 == 0:
@@ -79,7 +82,7 @@ def main(lang: Literal["en", "he"]):
                     for _ in range(1):
                         model.eval()
                         sampled = tokenizer.detokenize(
-                            model.better_sample_continuation(tokenizer.tokenize(word), max_tokens_to_generate=1, temperature=0.5, topK=5)
+                            model.better_sample_continuation(tokenizer.tokenize(word), max_tokens_to_generate=500, temperature=0.5, topK=5)
                         )
                         model.train()
                         print(f"Model sample: '''{sampled}'''")
@@ -101,5 +104,5 @@ def main(lang: Literal["en", "he"]):
 
 
 if __name__ == "__main__":
-    main("he")
     main("en")
+    main("he")

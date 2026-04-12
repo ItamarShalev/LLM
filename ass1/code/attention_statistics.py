@@ -12,9 +12,9 @@ graphs_path.mkdir(exist_ok=True, parents=True)
 
 heat_map_path = graphs_path / "heat_maps"
 heat_map_path.mkdir(exist_ok=True, parents=True)
-previous_token_head_checker_path = dirpath / "previous_token_head_checker"
+previous_token_head_checker_path = graphs_path / "previous_token_head_checker"
 previous_token_head_checker_path.mkdir(exist_ok=True, parents=True)
-induction_heads_checker_path = dirpath / "induction_heads_checker"
+induction_heads_checker_path = graphs_path / "induction_heads_checker"
 induction_heads_checker_path.mkdir(exist_ok=True, parents=True)
 
 
@@ -29,11 +29,21 @@ def produce_heat_map(attention_heads, letters: str, layer_name: str = ""):
 
     n_heads, seq_len, _ = attention_heads.shape
 
-    #max 3 per row
-    n_cols = min(3, n_heads)
-    n_rows = (n_heads + n_cols - 1) // n_cols
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
-    axes = axes.flatten() if n_heads > 1 else [axes]
+    # Keep up to 4 heatmaps per row, but create only the needed axes per row.
+    max_cols = min(4, n_heads)
+    n_rows = (n_heads + max_cols - 1) // max_cols
+    fig = plt.figure(figsize=(5 * max_cols, 5 * n_rows))
+    outer_grid = fig.add_gridspec(n_rows, 1)
+
+    axes = []
+    plotted_heads = 0
+    for row in range(n_rows):
+        heads_left = n_heads - plotted_heads
+        n_cols_in_row = min(max_cols, heads_left)
+        row_grid = outer_grid[row].subgridspec(1, n_cols_in_row)
+        for col in range(n_cols_in_row):
+            axes.append(fig.add_subplot(row_grid[0, col]))
+            plotted_heads += 1
     fig.suptitle(f"Attention heads for layer {layer_name}, with '{letters}' tokens", fontsize=16)
     for i in range(n_heads):
         ax = axes[i]

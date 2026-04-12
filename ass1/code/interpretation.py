@@ -8,16 +8,15 @@ from attention_statistics import induction_heads_checker, produce_heat_map, prev
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dirpath = Path(__file__).parent.parent
-checkpoint_path = dirpath / "checkpoints" / "en" / "checkpoint_efficient=True_50000.pt"
+checkpoint_path = dirpath / "new_checkpoints" / "en" / "checkpoint_efficient=True_50000.pt"
 
 def main():
 
     seq_len = 128
-    batch_size = 64
     efficient = True
-    n_layers = 6
-    n_heads = 6
-    embed_size = 192
+    n_layers = 7
+    n_heads = 8
+    embed_size = 256
     mlp_hidden_size = embed_size * 4
 
     tokenizer, _ = data.load_data(dirpath / "data" / "en")
@@ -39,40 +38,35 @@ def main():
     model.load_state_dict(checkpoint["model_state_dict"])
     print(f"Loaded checkpoint from {checkpoint_path}.")
 
-    words = "quick brown fox jumps over the lazy dog".split()
-    tokenized_words = [tokenizer.tokenize(word) for word in words]
+    words = ["quick", "brown", "jumps", "hello", "world", "apple", "grape", "peach", "mango", "berry"]
+    tokenized_words = [torch.tensor(tokenizer.tokenize(word)).to(DEVICE) for word in words]  
 
+    for word, tokenized_word in zip(words, tokenized_words):
+        model(tokenized_word.unsqueeze(0))  # Add batch dimension
+        for layer_name, attention_heads in ATTENTION_HEADS.items():
+            produce_heat_map(attention_heads.squeeze(), word, layer_name=layer_name)
 
-    five_letter_words = ["quick", "brown", "jumps", "hello", "world", "apple", "grape", "peach", "mango", "berry"]
-    five_letter_tokenized_words = [tokenizer.tokenize(word) for word in five_letter_words]  
-
-    #for word, tokenized_word in zip(words, tokenized_words):
-
-    #    model.better_sample_continuation(tokenized_word, max_tokens_to_generate=1, temperature=0.5, topK=5)
-    #    for layer_name, attention_heads in ATTENTION_HEADS.items():
-    #        produce_heat_map(attention_heads.squeeze(), word, layer_name=layer_name)
-
-    model(torch.stack([torch.tensor(word) for word in five_letter_tokenized_words]).to(DEVICE))
-    # for layer_name, attention_heads in ATTENTION_HEADS.items():
-    #     previous_token_head_checker(attention_heads, layer=layer_name)
+    model(torch.stack(tokenized_words))
+    for layer_name, attention_heads in ATTENTION_HEADS.items():
+         previous_token_head_checker(attention_heads, layer=layer_name)
 
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         begin_of_sequence_head_checker(attention_heads, layer=layer_name)
 
     sentences_with_repeated_tokens = [
-    "apple grape", # 11
-    "grape apple", # 11
-    "easy peasy ", # 11 
-    "peasy easy ", # 11 
-    "hello hello", # 11
-    "world world", # 11
-    "test test  ", # 11
-    "data data  ", # 11 
-    "model model", # 11
-    "train train"  # 11
+    "apple grape", 
+    "grape apple",   
+    "hello hello", 
+    "world world",  
+    "model model", 
+    "train train",
+    "datum datum",
+    "seven seven",
+    "eight eight",
+
     ]
-    tokenized_sentences = [tokenizer.tokenize(sentence) for sentence in sentences_with_repeated_tokens]
-    model(torch.stack([torch.tensor(sentence) for sentence in tokenized_sentences]).to(DEVICE))
+    tokenized_sentences = [torch.tensor(tokenizer.tokenize(sentence)).to(DEVICE) for sentence in sentences_with_repeated_tokens]
+    model(torch.stack(tokenized_sentences))
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         induction_heads_checker(attention_heads, layer=layer_name, sentences=sentences_with_repeated_tokens)
 
