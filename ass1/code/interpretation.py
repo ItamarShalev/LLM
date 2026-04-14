@@ -3,7 +3,7 @@ from pathlib import Path
 from transformer import TransformerLM
 import data
 from hooks import attention_hook, ATTENTION_HEADS
-from attention_statistics import induction_heads_checker, produce_heat_map, previous_token_head_checker, begin_of_sequence_head_checker
+from attention_statistics import *
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -38,6 +38,7 @@ def main():
     model.load_state_dict(checkpoint["model_state_dict"])
     print(f"Loaded checkpoint from {checkpoint_path}.")
 
+    """
     words = ["quick", "brown", "jumps", "hello", "world", "apple", "grape", "peach", "mango", "berry"]
     tokenized_words = [torch.tensor(tokenizer.tokenize(word)).to(DEVICE) for word in words]  
 
@@ -69,6 +70,26 @@ def main():
     model(torch.stack(tokenized_sentences))
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         induction_heads_checker(attention_heads, layer=layer_name, sentences=sentences_with_repeated_tokens)
+    """
+    sentences = [
+    "the quick brown fox jumps over the dog  ",
+    "aeiou aeiou aeiou aeiou aeiou aeiou     ",
+    "strength and rhythm in every single step",
+    "banana smoothie and organic apple juice ",
+    "cryptic glyphs shown on the stone walls ",
+    "education is the key to every success   ",
+    "sky high fly by light night bright wings",
+    "an apple a day keeps the doctor away now",
+    "sphynx of black quartz judge my dark vow",
+    "vowel consonant testing for neural heads"
+    ]
+
+    tokenized_sentences = [tokenizer.tokenize(sentence) for sentence in sentences]
+    tokenized_sentences = [torch.tensor(tokens).to(DEVICE) for tokens in tokenized_sentences]
+    model(torch.stack(tokenized_sentences))
+
+    for layer_name, attention_heads in ATTENTION_HEADS.items():
+        vowel_consonant_head_checker(attention_heads, layer=layer_name, sentences=sentences)
 
 
 if __name__ == "__main__":

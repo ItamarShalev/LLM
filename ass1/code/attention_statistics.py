@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import torch
 
 
+
 dirpath = Path(__file__).parent.parent
 
 graphs_path = dirpath / "graphs"
@@ -16,6 +17,8 @@ previous_token_head_checker_path = graphs_path / "previous_token_head_checker"
 previous_token_head_checker_path.mkdir(exist_ok=True, parents=True)
 induction_heads_checker_path = graphs_path / "induction_heads_checker"
 induction_heads_checker_path.mkdir(exist_ok=True, parents=True)
+vowel_consonant_head_checker_path = graphs_path / "vowel_consonant_head_checker"
+vowel_consonant_head_checker_path.mkdir(exist_ok=True, parents=True)
 
 
 def produce_heat_map(attention_heads, letters: str, layer_name: str = ""):
@@ -151,3 +154,98 @@ def induction_heads_checker(attention_head: torch.Tensor, layer: str = "", sente
     path = induction_heads_checker_path / f"induction_heads_checker_{layer}.png"
     plt.savefig(path)
     plt.show()
+
+def vowel_consonant_head_checker(attention_head: torch.Tensor, layer: str, sentences: list[str]):
+    """analyzes the attention patterns of heads based on whether the current token is a vowel or a consonant, 
+    and whether the attended tokens are vowels or consonants. It produces two subplots: one for when the current token is a vowel, 
+    showing the average attention scores to vowels and consonants; and one for when the current token is a consonant, 
+    showing the average attention scores to vowels and consonants. This can help identify heads that have a preference for attending to vowels or consonants based on the type of the current token.
+
+    Args:
+        attention_head (torch.Tensor): a tensor of shape (B, H, N, N) containing the attention scores for a specific layer across all attention heads, where B is the batch size, H is the number of heads, and N is the sequence length
+        layer (str): the name of the layer for which the plot is being produced, used for the title of the plot.
+        sentences (list[str]): a list of sentences to analyze, used to determine which tokens are vowels and consonants and to compute the average attention scores based on these categories.
+    """
+    vowels_set = set("aeiouAEIOU")
+    consonants_set = set("bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ")
+    
+    batch_size, n_heads, seq_len, _ = attention_head.shape
+    
+    # 4 Accumulators: [Source]_[Target]_scores
+    v_v_scores = torch.zeros(n_heads, device=attention_head.device)
+    v_c_scores = torch.zeros(n_heads, device=attention_head.device)
+    c_v_scores = torch.zeros(n_heads, device=attention_head.device)
+    c_c_scores = torch.zeros(n_heads, device=attention_head.device)
+    
+    # Counter for denominators
+    counts = {"vv": 0, "vc": 0, "cv": 0, "cc": 0}
+
+    for b, sentence in enumerate(sentences):
+        tokens = list(sentence)
+        is_v = torch.tensor([t in vowels_set for t in tokens], device=attention_head.device)
+        is_c = torch.tensor([t in consonants_set for t in tokens], device=attention_head.device)
+        
+        for i in range(1, len(tokens)):
+            v_indices = torch.where(is_v[:i])[0]
+            c_indices = torch.where(is_c[:i])[0]
+            
+            # Case 1: Current token is a Vowel
+            if is_v[i]:
+                if len(v_indices) > 0:
+                    v_v_scores += attention_head[b, :, i, v_indices].sum(dim=-1)
+                    counts["vv"] += 1
+                if len(c_indices) > 0:
+                    v_c_scores += attention_head[b, :, i, c_indices].sum(dim=-1)
+                    counts["vc"] += 1
+            
+            # Case 2: Current token is a Consonant
+            elif is_c[i]:
+                if len(v_indices) > 0:
+                    c_v_scores += attention_head[b, :, i, v_indices].sum(dim=-1)
+                    counts["cv"] += 1
+                if len(c_indices) > 0:
+                    c_c_scores += attention_head[b, :, i, c_indices].sum(dim=-1)
+                    counts["cc"] += 1
+
+    # Calculate averages
+    avg_vv = (v_v_scores / counts["vv"]).cpu().numpy() if counts["vv"] > 0 else np.zeros(n_heads)
+    avg_vc = (v_c_scores / counts["vc"]).cpu().numpy() if counts["vc"] > 0 else np.zeros(n_heads)
+    avg_cv = (c_v_scores / counts["cv"]).cpu().numpy() if counts["cv"] > 0 else np.zeros(n_heads)
+    avg_cc = (c_c_scores / counts["cc"]).cpu().numpy() if counts["cc"] > 0 else np.zeros(n_heads)
+
+    # Plotting with 2 subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    x = np.arange(n_heads)
+    width = 0.35
+
+    # Subplot 1: When the current token is a Vowel
+    ax1.bar(x - width/2, avg_vv, width, label='Attending to Vowels', color='#4A90E2')
+    ax1.bar(x + width/2, avg_vc, width, label='Attending to Consonants', color='#50E3C2')
+    ax1.set_title(f"Source: Vowels (Layer {layer})")
+    ax1.set_ylabel("Mean Attention")
+    ax1.legend()
+    ax1.grid(axis='y', linestyle='--', alpha=0.4)
+
+    # Subplot 2: When the current token is a Consonant
+    ax2.bar(x - width/2, avg_cv, width, label='Attending to Vowels', color='#D0021B')
+    ax2.bar(x + width/2, avg_cc, width, label='Attending to Consonants', color='#F5A623')
+    ax2.set_title(f"Source: Consonants (Layer {layer})")
+    ax2.set_ylabel("Mean Attention")
+    ax2.set_xlabel("Head Index")
+    ax2.legend()
+    ax2.grid(axis='y', linestyle='--', alpha=0.4)
+
+    plt.xticks(x)
+    plt.tight_layout()
+    plt.savefig(vowel_consonant_head_checker_path / f"vowel_consonant_head_checker_{layer}.png")
+    plt.show()
+
+
+
+__all__ = [
+    "produce_heat_map",
+    "previous_token_head_checker",
+    "begin_of_sequence_head_checker",
+    "induction_heads_checker",
+    "vowel_consonant_head_checker"
+]
