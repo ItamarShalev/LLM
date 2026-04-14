@@ -72,17 +72,17 @@ def main():
         induction_heads_checker(attention_heads, layer=layer_name, sentences=sentences_with_repeated_tokens)
     """
     sentences = [
-    "the quick brown fox jumps over the dog  ",
-    "aeiou aeiou aeiou aeiou aeiou aeiou     ",
-    "strength and rhythm in every single step",
-    "banana smoothie and organic apple juice ",
-    "cryptic glyphs shown on the stone walls ",
-    "education is the key to every success   ",
-    "sky high fly by light night bright wings",
-    "an apple a day keeps the doctor away now",
-    "sphynx of black quartz judge my dark vow",
-    "vowel consonant testing for neural heads"
+    "era of coast idea brand union alert ratio ", # V:17, C:18
+    "open ice area unite blend ideal easy echo ", # V:20, C:16
+    "blue iris area awake solid coast epic     ", # V:17, C:18
+    "ideal image above eagle solid early ago   ", # V:19, C:17
+    "quiet coast agile irony under solid brand ",  # V:18, C:18
+    "audio image ultra coast ebook brand item  ", # V:20, C:16
+    "equal solid oiler alert coast urban brand ",  # V:18, C:18
+    "unite every solid email adult coast brand ",  # V:17, C:19
+    "coast aside ivory awake eagle brand icon  ", # V:19, C:16
     ]
+
 
     tokenized_sentences = [tokenizer.tokenize(sentence) for sentence in sentences]
     tokenized_sentences = [torch.tensor(tokens).to(DEVICE) for tokens in tokenized_sentences]
