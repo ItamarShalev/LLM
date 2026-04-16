@@ -140,7 +140,7 @@ def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask, identity
 
 
 class CausalSelfAttention(nn.Module):
-    def __init__(self, embed_dim, n_heads, max_context_len, efficient = False):
+    def __init__(self, embed_dim, n_heads, max_context_len, efficient = True):
         super().__init__()
         assert embed_dim % n_heads == 0
         # the linear layers used for k, q, v computations:

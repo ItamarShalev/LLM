@@ -9,7 +9,7 @@ from hooks import attention_hook
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class TransformerDecoderBlock(nn.Module):
-    def __init__(self, n_heads: int, embed_size: int, mlp_hidden_size: int, max_context_len, with_residuals: bool = False, pre_norm: bool = True, efficient: bool = False):
+    def __init__(self, n_heads: int, embed_size: int, mlp_hidden_size: int, max_context_len, with_residuals: bool = False, pre_norm: bool = True, efficient: bool = True):
         super().__init__()
         self.causal_attention = attention.CausalSelfAttention(embed_size, n_heads, max_context_len, efficient)
         self.dropout = nn.Dropout(0.1)
@@ -92,7 +92,7 @@ class TransformerLM(nn.Module):
             vocab_size: int,
             mlp_hidden_size: int,
             with_residuals: bool,
-            efficient: bool = False,
+            efficient: bool = True,
             register_hooks: bool = False
             ):
         super().__init__()
