@@ -127,20 +127,20 @@ def _evaluate(model: torch.nn.Module, validation_sequences: list[list[int]], bat
 
 
 def _sample_hyperparameters(rng: random.Random) -> dict[str, float | int]:
-    seq_len = rng.choice([32, 64, 128, 256])
     n_layers = rng.choice([6, 7, 8])
     n_heads = rng.choice([6, 7, 8])
     embed_size = 32 * n_heads
     mlp_hidden_size = embed_size * 4
     learning_rate = rng.uniform(1e-4, 5e-4)
+    weight_decay = rng.uniform(0.01, 0.1)
 
     return {
-        "seq_len": seq_len,
         "n_layers": n_layers,
         "n_heads": n_heads,
         "embed_size": embed_size,
         "mlp_hidden_size": mlp_hidden_size,
         "learning_rate": learning_rate,
+        "weight_decay": weight_decay,
     }
 
 
@@ -162,18 +162,21 @@ def _run_single_trial(
     word: str,
     hyperparams: dict[str, float | int],
 ) -> dict:
-    seq_len = int(hyperparams["seq_len"])
     n_layers = int(hyperparams["n_layers"])
     n_heads = int(hyperparams["n_heads"])
     embed_size = int(hyperparams["embed_size"])
     mlp_hidden_size = int(hyperparams["mlp_hidden_size"])
     learning_rate = float(hyperparams["learning_rate"])
+    weight_decay = float(hyperparams["weight_decay"])
+
 
     print(
-        f"[Trial {trial_index}] Starting: seq_len={seq_len}, n_layers={n_layers}, "
+        f"[Trial {trial_index}] Starting: n_layers={n_layers}, "
         f"n_heads={n_heads}, embed_size={embed_size}, mlp_hidden_size={mlp_hidden_size}, "
-        f"learning_rate={learning_rate:.8f}"
+        f"learning_rate={learning_rate:.8f}, weight_decay={weight_decay:.6f}"
     )
+
+    seq_len = 128
 
     train_data_iter = _random_order_data_iterator(tokenized_train_data, seq_len + 1, seed + trial_index)
 
@@ -188,9 +191,10 @@ def _run_single_trial(
         efficient=efficient,
     ).to(DEVICE)
 
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95])
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95], weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_batches_to_train)
 
+    eval_batches = []
     train_losses = []
     val_losses = []
     model.train()
@@ -228,6 +232,7 @@ def _run_single_trial(
 
                 train_losses.append(loss.item())
                 val_losses.append(validation_loss)
+                eval_batches.append(num_batches)
 
                 if validation_loss < best_validation_loss:
                     best_validation_loss = validation_loss
@@ -245,6 +250,7 @@ def _run_single_trial(
                             "embed_size": embed_size,
                             "mlp_hidden_size": mlp_hidden_size,
                             "learning_rate": learning_rate,
+                            "weight_decay": weight_decay,
                         },
                         "trial_index": trial_index,
                     }
@@ -262,6 +268,7 @@ def _run_single_trial(
                             "embed_size": embed_size,
                             "mlp_hidden_size": mlp_hidden_size,
                             "learning_rate": learning_rate,
+                            "weight_decay": weight_decay,
                         },
                         "trial_index": trial_index,
                     }
@@ -292,6 +299,7 @@ def _run_single_trial(
                         "embed_size": embed_size,
                         "mlp_hidden_size": mlp_hidden_size,
                         "learning_rate": learning_rate,
+                        "weight_decay": weight_decay,
                     },
                     "trial_index": trial_index,
                 }
@@ -301,17 +309,18 @@ def _run_single_trial(
             if num_batches >= num_batches_to_train or early_exit:
                 end = time.time()
                 plt.figure(figsize=(10, 5))
-                plt.plot(train_losses, label="Training Loss")
-                plt.plot(val_losses, label="Validation Loss")
-                plt.xlabel("Evaluation Steps")
+                plt.plot(eval_batches, train_losses, label="Training Loss")
+                plt.plot(eval_batches, val_losses, label="Validation Loss")
+                plt.xlabel("Batches Seen")
                 plt.ylabel("Loss")
                 plt.title(
                     f"Trial {trial_index} Loss (efficient={efficient}, {lang}, seq_len={seq_len}, "
                     f"n_layers={n_layers}, n_heads={n_heads}, embed_size={embed_size}, "
-                    f"learning_rate={learning_rate:.6f}, cosine annealing)",
+                    f"learning_rate={learning_rate:.6f}, weight_decay={weight_decay:.6f}, cosine annealing)",
                     wrap=True,
                 )
                 plt.legend()
+                plt.grid(True, alpha=0.3)
                 plt.tight_layout()
                 plt.savefig(loss_data_path / f"loss_plot_trial_{trial_index}_{efficient=}_{lang}.png", bbox_inches="tight")
                 plt.close()
@@ -332,12 +341,14 @@ def _run_single_trial(
                     "best_validation_loss": best_validation_loss,
                     "best_state": best_state,
                     "hyperparams": {
+
                         "seq_len": seq_len,
                         "n_layers": n_layers,
                         "n_heads": n_heads,
                         "embed_size": embed_size,
                         "mlp_hidden_size": mlp_hidden_size,
                         "learning_rate": learning_rate,
+                        "weight_decay": weight_decay,
                     },
                 }
 
@@ -353,7 +364,7 @@ def main(lang: Literal["en", "he"] = "en"):
     dirpath = Path(__file__).parent.parent
     validation_checkpoint_dir = dirpath / "validation_checkpoints_random_search"
     data_path = dirpath / "data" / lang
-    loss_data_path = dirpath / "loss_tracking"
+    loss_data_path = dirpath / "loss_tracking" / lang
     loss_data_path.mkdir(exist_ok=True, parents=True)
 
     validation_checkpoint_dir.mkdir(exist_ok=True, parents=True)
@@ -368,7 +379,7 @@ def main(lang: Literal["en", "he"] = "en"):
 
     gradient_clipping = 1.0
 
-    max_seq_len = 256
+    max_seq_len = 128
 
     corpus_files = _list_corpus_files(data_path)
     corpus_paragraphs = _read_corpus_paragraphs(data_path)
@@ -429,7 +440,8 @@ def main(lang: Literal["en", "he"] = "en"):
         f"n_heads={global_best_hyperparams['n_heads']}, "
         f"embed_size={global_best_hyperparams['embed_size']}, "
         f"mlp_hidden_size={global_best_hyperparams['mlp_hidden_size']}, "
-        f"learning_rate={global_best_hyperparams['learning_rate']:.8f}"
+        f"learning_rate={global_best_hyperparams['learning_rate']:.8f}, "
+        f"weight_decay={global_best_hyperparams['weight_decay']:.6f}"
     )
 
     best_checkpoint_file = (
@@ -441,7 +453,8 @@ def main(lang: Literal["en", "he"] = "en"):
             f"_heads{global_best_hyperparams['n_heads']}"
             f"_embed{global_best_hyperparams['embed_size']}"
             f"_mlp{global_best_hyperparams['mlp_hidden_size']}"
-            f"_lr{global_best_hyperparams['learning_rate']:.8f}.pt"
+            f"_lr{global_best_hyperparams['learning_rate']:.8f}"
+            f"_wd{global_best_hyperparams['weight_decay']:.6f}.pt"
         )
     )
     torch.save(global_best_state, best_checkpoint_file)
@@ -450,5 +463,5 @@ def main(lang: Literal["en", "he"] = "en"):
 
 
 if __name__ == "__main__":
-    #main("en")
+    main("en")
     main("he")

@@ -8,6 +8,7 @@ import torch
 from torch import nn, optim
 from transformer import TransformerLM
 import data
+import matplotlib.pyplot as plt
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -19,6 +20,9 @@ def main(lang: Literal["en", "he"]):
     data_path = dirpath / "data" / lang
     checkpoint_path = dirpath / "new_checkpoints" / lang
     checkpoint_path.mkdir(exist_ok=True, parents=True)
+    train_loss_checkpoint_path = dirpath / "loss_tracking" / lang
+    train_loss_checkpoint_path.mkdir(exist_ok=True, parents=True)
+
     efficient = True
     save_checkpoint_every = 1000
 
@@ -50,7 +54,11 @@ def main(lang: Literal["en", "he"]):
         efficient=efficient
     ).to(DEVICE)
 
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95])
+    train_losses = []
+
+    weight_decay = 0.1
+
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95], weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_batches_to_train)
 
     model.train()
@@ -77,6 +85,7 @@ def main(lang: Literal["en", "he"]):
 
             num_batches += 1
             if num_batches % 10 == 0:
+                train_losses.append(loss.item())
                 print(f"Seen {num_batches} batches. last loss is: {loss.item()}")
                 if num_batches % 100 == 0:
                     for _ in range(1):
@@ -87,6 +96,7 @@ def main(lang: Literal["en", "he"]):
                         model.train()
                         print(f"Model sample: '''{sampled}'''")
                     print("")
+            
             if num_batches % save_checkpoint_every == 0:
                 checkpoint_file = checkpoint_path / f"checkpoint_{efficient=}_{num_batches}.pt"
                 state = {
@@ -99,8 +109,21 @@ def main(lang: Literal["en", "he"]):
                 print(f"Saved checkpoint to {checkpoint_file}")
             if num_batches >= num_batches_to_train:
                 end = time.time()
-                print(f"Finished training {num_batches} batches in {end - start_time:.2f} seconds.")    
+                print(f"Finished training {num_batches} batches in {end - start_time:.2f} seconds.")
+                plt.figure(figsize=(10, 5))
+                plt.plot(train_losses)    
+                plt.xlabel("Batches")
+                plt.ylabel("Loss")
+                plt.title(
+                    f"Training Loss (efficient={efficient}, {lang}, seq_len={seq_len}, "
+                    f"n_layers={n_layers}, n_heads={n_heads}, embed_size={embed_size}, "
+                    f"learning_rate={learning_rate:.6f}, weight_decay={weight_decay:.6f}, cosine annealing)",
+                    wrap=True,
+                )
+                plt.savefig(train_loss_checkpoint_path / f"training_main_{efficient=}_{num_batches=}_{seq_len=}_{n_layers=}_{n_heads=}_{embed_size=}_{learning_rate=}_{weight_decay=}.png")
+                plt.close()
                 return
+
 
 
 if __name__ == "__main__":

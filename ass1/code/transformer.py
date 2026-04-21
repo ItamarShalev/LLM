@@ -49,7 +49,7 @@ class TransformerDecoderBlock(nn.Module):
         else:
             x = inputs
             x = self.causal_attention(x)
-            x =self.dropout(x)
+            x = self.dropout(x)
             x = self.layer_norm_1(x)
             x = self.mlp(x)
             x = self.layer_norm_2(x)

@@ -32,13 +32,15 @@ def main():
         efficient=efficient,    
         register_hooks=True
     ).to(DEVICE)
+    print(tokenizer.vocab_size())
     model.eval()
 
+
+    
     checkpoint = torch.load(checkpoint_path, weights_only=False, map_location=DEVICE)
     model.load_state_dict(checkpoint["model_state_dict"])
     print(f"Loaded checkpoint from {checkpoint_path}.")
 
-    """
     words = ["quick", "brown", "jumps", "hello", "world", "apple", "grape", "peach", "mango", "berry"]
     tokenized_words = [torch.tensor(tokenizer.tokenize(word)).to(DEVICE) for word in words]  
 
@@ -70,7 +72,7 @@ def main():
     model(torch.stack(tokenized_sentences))
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         induction_heads_checker(attention_heads, layer=layer_name, sentences=sentences_with_repeated_tokens)
-    """
+    
     sentences = [
     "era of coast idea brand union alert ratio ", # V:17, C:18
     "open ice area unite blend ideal easy echo ", # V:20, C:16
@@ -90,6 +92,7 @@ def main():
 
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         vowel_consonant_head_checker(attention_heads, layer=layer_name, sentences=sentences)
+
 
 
 if __name__ == "__main__":
