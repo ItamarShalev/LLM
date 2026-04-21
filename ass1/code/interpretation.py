@@ -44,21 +44,29 @@ def main():
     words = ["quick", "brown", "jumps", "hello", "world", "apple", "grape", "peach", "mango", "berry"]
     tokenized_words = [torch.tensor(tokenizer.tokenize(word)).to(DEVICE) for word in words]  
 
+    """
     for word, tokenized_word in zip(words, tokenized_words):
         model(tokenized_word.unsqueeze(0))  # Add batch dimension
         for layer_name, attention_heads in ATTENTION_HEADS.items():
             produce_heat_map(attention_heads.squeeze(), word, layer_name=layer_name)
+    
+    """
 
+    """
     model(torch.stack(tokenized_words))
+
     for layer_name, attention_heads in ATTENTION_HEADS.items():
          previous_token_head_checker(attention_heads, layer=layer_name)
+
+    
 
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         begin_of_sequence_head_checker(attention_heads, layer=layer_name)
 
+    """
+
+
     sentences_with_repeated_tokens = [
-    "apple grape", 
-    "grape apple",   
     "hello hello", 
     "world world",  
     "model model", 
@@ -66,6 +74,9 @@ def main():
     "datum datum",
     "seven seven",
     "eight eight",
+    "truth truth",
+    "false false",
+    "apple apple",
 
     ]
     tokenized_sentences = [torch.tensor(tokenizer.tokenize(sentence)).to(DEVICE) for sentence in sentences_with_repeated_tokens]
@@ -73,6 +84,7 @@ def main():
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         induction_heads_checker(attention_heads, layer=layer_name, sentences=sentences_with_repeated_tokens)
     
+    """
     sentences = [
     "era of coast idea brand union alert ratio ", # V:17, C:18
     "open ice area unite blend ideal easy echo ", # V:20, C:16
@@ -93,7 +105,7 @@ def main():
     for layer_name, attention_heads in ATTENTION_HEADS.items():
         vowel_consonant_head_checker(attention_heads, layer=layer_name, sentences=sentences)
 
-
+    """
 
 if __name__ == "__main__":
     main()
