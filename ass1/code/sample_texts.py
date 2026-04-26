@@ -4,15 +4,16 @@ from pathlib import Path
 import data
 from tqdm import tqdm
 
-en_tokenizer, _ = data.load_data(Path("ass1/data/en"))
-hebrew_tokenizer, _ = data.load_data(Path("ass1/data/he"))
+DIRPATH = Path(__file__).resolve().parent.parent
+en_tokenizer, _ = data.load_data(DIRPATH / "data" / "en")
+hebrew_tokenizer, _ = data.load_data(DIRPATH / "data" / "he")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 #load the final english model made in main.py
 
-checkpoint_path = "ass1/new_checkpoints/en/checkpoint_efficient=True_50000.pt"
+checkpoint_path = DIRPATH / "new_checkpoints" / "en" / "checkpoint_efficient=True_50000.pt"
 
 model = TransformerLM(
     n_layers=7,
@@ -28,22 +29,22 @@ model.eval()
 checkpoint = torch.load(checkpoint_path, weights_only=False)
 model.load_state_dict(checkpoint["model_state_dict"])
 
-output_dir = Path("ass1/test_outputs")
+output_dir = DIRPATH / "test_outputs"
 output_dir.mkdir(exist_ok=True)
 
 english_file = output_dir / "english_samples.txt"
 
-with open(english_file, "w") as f:
+with open(english_file, "w", encoding="utf-8") as f:
     for _ in tqdm(range(50), desc="Generating samples for English words"):
         sample_text = en_tokenizer.detokenize(
             model.better_sample_continuation(en_tokenizer.tokenize("hello"), max_tokens_to_generate=500, temperature=0.5, topK=5)
             )
-        f.write(sample_text + "\n\n\n\n")
+        f.write(f'"{sample_text}"' + "\n\n")
 
 
 
 #get last hebrew checkpoint from main.py and generate samples for hebrew as well
-checkpoint_path_hebrew = "ass1/new_checkpoints/he/checkpoint_efficient=True_50000.pt"
+checkpoint_path_hebrew = DIRPATH / "new_checkpoints" / "he" / "checkpoint_efficient=True_50000.pt"
 
 model_hebrew = TransformerLM(
     n_layers=7,
@@ -68,4 +69,4 @@ with open(hebrew_file, "w", encoding="utf-8") as f:
         sample_text = hebrew_tokenizer.detokenize(
             model_hebrew.better_sample_continuation(hebrew_tokenizer.tokenize("שלום"), max_tokens_to_generate=500, temperature=0.5, topK=5)
             )
-        f.write(sample_text + "\n\n\n\n")
+        f.write(f'"{sample_text}"' + "\n\n")
