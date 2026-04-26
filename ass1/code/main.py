@@ -28,10 +28,10 @@ def main(lang: Literal["en", "he"]):
 
     word = "hello" if lang == "en" else "שלום"
 
-    n_layers = 7 #6
-    n_heads = 8 #6
-    embed_size = 256 #192
-    mlp_hidden_size = embed_size * 4
+    n_layers = 7 #6 original 
+    n_heads = 8 #6 original
+    embed_size = 256 #192 original
+    mlp_hidden_size = embed_size * 4 
 
     learning_rate = 5e-4 
     gradient_clipping = 1.0
@@ -59,6 +59,8 @@ def main(lang: Literal["en", "he"]):
     weight_decay = 0.1
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, betas=[0.9, 0.95], weight_decay=weight_decay)
+    
+    #added change, using cosine annealing learning rate scheduler with T_max equal to the number of batches we plan to train for, so that the learning rate
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_batches_to_train)
 
     model.train()
@@ -80,6 +82,8 @@ def main(lang: Literal["en", "he"]):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping)
             optimizer.step()
+
+            # step the learning rate scheduler after each batch
             scheduler.step()
             optimizer.zero_grad()
 

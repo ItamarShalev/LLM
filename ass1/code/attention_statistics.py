@@ -1,3 +1,11 @@
+"""
+This file defines helper functions to create graphs for analyzing the attention patterns of the trained model. 
+These functions will be used in the interpretation.py file to produce heat maps and other visualizations of 
+the attention scores for different layers and heads of the model, based on different input words and sentences. 
+The graphs will help us understand how the model is attending to different tokens in the input and identify any patterns or 
+special behaviors in the attention heads.
+"""
+
 from pathlib import Path
 
 import numpy as np
@@ -241,7 +249,7 @@ def vowel_consonant_head_checker(attention_head: torch.Tensor, layer: str, sente
     plt.show()
 
 
-
+#expose the functions to be used in interpretation.py
 __all__ = [
     "produce_heat_map",
     "previous_token_head_checker",

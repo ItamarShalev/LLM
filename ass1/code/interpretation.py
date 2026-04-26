@@ -1,17 +1,29 @@
+"""the purpose of this file is to analyze the attention heads of the best model we trained in the previous part, 
+and to produce heat maps for the attention scores of the heads. 
+We will analyze the attention heads for different words and sentences, 
+and check if there are any patterns in the attention scores. 
+We will also check if there are any heads that attend to specific tokens in the input, 
+such as the previous token or the first token in the sequence
+"""
+
+
 import torch
 from pathlib import Path
 from transformer import TransformerLM
 import data
-from hooks import attention_hook, ATTENTION_HEADS
+from hooks import ATTENTION_HEADS #this is the dictionary where the attention heads are stored by the hooks
 from attention_statistics import *
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dirpath = Path(__file__).parent.parent
+
+#this is the checkpoint of the model we will be analyzing
 checkpoint_path = dirpath / "new_checkpoints" / "en" / "checkpoint_efficient=True_50000.pt"
 
 def main():
 
+    #this hyperparmeteters of the best model
     seq_len = 128
     efficient = True
     n_layers = 7
@@ -19,6 +31,7 @@ def main():
     embed_size = 256
     mlp_hidden_size = embed_size * 4
 
+    #need this for the final layer for the vocabulary as well as for tokenize the words we will analyze
     tokenizer, _ = data.load_data(dirpath / "data" / "en")
 
     model: torch.nn.Module = TransformerLM(
@@ -47,17 +60,21 @@ def main():
     for word, tokenized_word in zip(words, tokenized_words):
         model(tokenized_word.unsqueeze(0))  # Add batch dimension
         for layer_name, attention_heads in ATTENTION_HEADS.items():
+
+            #get the attention heads for the current layer and produce a heat map for the attention scores of the first token in the word (the one that corresponds to the first character) to all other tokens in the word. The heat map should be saved as an image file with a name that includes the word and the layer name.
             produce_heat_map(attention_heads.squeeze(), word, layer_name=layer_name)
     
 
     model(torch.stack(tokenized_words))
 
     for layer_name, attention_heads in ATTENTION_HEADS.items():
+         #check if there are attention heads that attend to the previous token in the sequence, and produce a heat map for the attention scores of the first token in each word to the previous token in the word. The heat map should be saved as an image file with a name that includes the word and the layer name.
          previous_token_head_checker(attention_heads, layer=layer_name)
 
     
 
     for layer_name, attention_heads in ATTENTION_HEADS.items():
+        #check if there are attention heads that attend to the first token in the sequence, and produce a heat map for the attention scores of the first token in each word to the first token in the word. The heat map should be saved as an image file with a name that includes the word and the layer name.
         begin_of_sequence_head_checker(attention_heads, layer=layer_name)
 
 
@@ -73,11 +90,11 @@ def main():
     "truth truth",
     "false false",
     "apple apple",
-
     ]
     tokenized_sentences = [torch.tensor(tokenizer.tokenize(sentence)).to(DEVICE) for sentence in sentences_with_repeated_tokens]
     model(torch.stack(tokenized_sentences))
     for layer_name, attention_heads in ATTENTION_HEADS.items():
+        #check induction
         induction_heads_checker(attention_heads, layer=layer_name, sentences=sentences_with_repeated_tokens)
     
     sentences = [
@@ -98,6 +115,7 @@ def main():
     model(torch.stack(tokenized_sentences))
 
     for layer_name, attention_heads in ATTENTION_HEADS.items():
+        #check if there are attention heads that attend differently to vowels and consonants
         vowel_consonant_head_checker(attention_heads, layer=layer_name, sentences=sentences)
 
 

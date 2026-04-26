@@ -93,7 +93,7 @@ class TransformerLM(nn.Module):
             mlp_hidden_size: int,
             with_residuals: bool,
             efficient: bool = True,
-            register_hooks: bool = False
+            register_hooks: bool = False #if we want to resister hooks or not
             ):
         super().__init__()
         self.embed = Embed(vocab_size, embed_size, max_context_len)
@@ -139,6 +139,8 @@ class TransformerLM(nn.Module):
                 # DONE initialize p.weight and p.bias (if it is not None).
                 # You can look at initializers in torch.nn.init
                 torch.nn.init.normal_(p.weight, mean=0.0, std=0.02)
+                #nn.Embedding does not have a bias per pytorch docs
+                #checking if p.bias is not none will raise an error
             elif 'kqv_matrices' in pn:
                 torch.nn.init.normal_(p, mean=0.0, std=0.02)
                 
@@ -176,7 +178,7 @@ class TransformerLM(nn.Module):
                 # DONE implement temperature and topK sampling.
                 distribution_for_last_token = F.softmax(logits_for_last_token / temperature)
                 topk_distribution, topk_indices = torch.topk(distribution_for_last_token, topK)
-                sampled_index_in_topk = torch.multinomial(topk_distribution, num_samples=1)
+                sampled_index_in_topk = torch.multinomial(topk_distribution, num_samples=1) #by documentation the sum of the distribution pecentages need not equal 1, but must be non-negative, they are used as weights if not summed up to 1
                 sampled_token = topk_indices[sampled_index_in_topk]
                 generated.append(sampled_token)
                 feed_to_lm.append(sampled_token)

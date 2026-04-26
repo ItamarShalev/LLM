@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 import math
 
-
+#since we are using custom kernals, we need the device here, in general, this would be shared in a utils file
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def create_kqv_matrix(input_vector_dim, n_heads = 1):
@@ -28,6 +28,8 @@ def attention_scores(a, b):
 
     # DONE compute A (remember: we are computing *scaled* dot product attention. don't forget the scaling.
     # (can do it in 1 or 2 lines.)
+
+    #a is of shape (B1,N1,D1) and b is of shape (B1, N1, D1) to batch matirx muliplication we must transpose each matrix in b
     A = (a @ b.transpose(-2, -1)) / math.sqrt(D1)
     return A
 
@@ -38,12 +40,16 @@ def create_causal_mask(embed_dim, n_heads, max_context_len):
     # are relevant.
     mask = torch.ones(max_context_len, max_context_len, device=DEVICE)
     mask = torch.tril(mask) # DONE replace this line with the creation of a causal mask.
+    
+    # NOTE tril was used to be similar to hugging face transformers where attention is passed as a tensor of 1s (what should be paid attention to)
     return mask
 
 def self_attention(v, A, mask = None, identity_layer: nn.Identity | None = None):
     # DONE compute sa (corresponding to y in the assignemnt text).
     # This should take very few lines of code.
     # As usual, the dimensions of v and of sa are (b x n x d).
+
+    # NOTE the identiy layer passed here was for ease in extracting the attention matrices when a hook has been attached to it
     if mask is not None:
         A = A.masked_fill(mask == 0, float('-inf'))
     attention_weights = torch.softmax(A, dim=-1)
@@ -110,7 +116,20 @@ def attention_scores_efficient(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor
     A = (a @ b.transpose(-2, -1)) / math.sqrt(D) #batch matrix multiplication, with scaling
     return A
 
-def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask, identity_layer: nn.Identity | None = None):
+def multi_head_attention_layer_efficient(x: torch.Tensor, kqv_tensor: torch.Tensor, kqv_bias: torch.Tensor, mask: torch.Tensor, identity_layer: nn.Identity | None = None):
+    """An efficient implementation of multi-head attention, where we compute k, q and v for all heads in a single operation, using kqv_tensor and kqv_bias, and then compute the attention scores and self-attention output using efficient implementations of these operations.
+
+    Args:
+        x (torch.Tensor): input tensor of size (B, N, D)
+        kqv_tensor (torch.Tensor): the kqv tensor for efficient multi-head attention, of size (n_head, input_vector_dim, input_vector_dim*3/n_heads)
+        kqv_bias (torch.Tensor): the bias for the kqv tensor, of size (n_head, 3 * input_vector_dim // n_heads)
+        mask (torch.Tensor): the causal mask, of size (N, N)
+        identity_layer (nn.Identity | None, optional): the identity layer for extracting attention scores. Defaults to None.
+
+    Returns:
+        _type_: the output tensor of size (B, N, D)
+    """
+
     B, N, D = x.size()
 
     n_heads = kqv_tensor.size(0)
@@ -137,10 +156,9 @@ def multi_head_attention_layer_efficient(x, kqv_tensor, kqv_bias, mask, identity
 
     return sa
     
-
-
 class CausalSelfAttention(nn.Module):
     def __init__(self, embed_dim, n_heads, max_context_len, efficient = True):
+        # NOTE efficienct is an argument to determine what attention implementation to used, 
         super().__init__()
         assert embed_dim % n_heads == 0
         # the linear layers used for k, q, v computations:
@@ -161,7 +179,7 @@ class CausalSelfAttention(nn.Module):
 
     def forward(self, x):
         seq_len = x.size(1)
-        cur_mask = self.mask[:seq_len, :seq_len]
+        cur_mask = self.mask[:seq_len, :seq_len] #prevent sequence length issues
         if self.efficient:
             sa = multi_head_attention_layer_efficient(x, self.kqv_matrices, self.kqv_bias, cur_mask, self.attention_identity)
         else:

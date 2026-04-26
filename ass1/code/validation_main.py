@@ -1,3 +1,9 @@
+""" This file implements a random search algorithm for hyperparameter tuning of the TransformerLM model when using a train/validation split. 
+It trains multiple models with different hyperparameters and tracks their training and validation losses, 
+saving checkpoints and plots for analysis. The best model is saved at the end of the search.
+"""
+
+
 from __future__ import annotations
 
 import random
@@ -17,11 +23,20 @@ import matplotlib.pyplot as plt
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+# Helper functions for data loading, splitting, and evaluation.
 def _list_corpus_files(data_path: Path) -> list[Path]:
     return [file_path for file_path in sorted(data_path.glob("*.txt")) if not file_path.name.startswith("._")]
 
 
 def _extract_paragraphs(text: str) -> list[str]:
+    """Extract paragraphs from the given text. A paragraph is defined as a block of text separated by one or more blank lines.
+
+    Args:
+        text (str): The input text from which to extract paragraphs.
+
+    Returns:
+        list[str]: A list of extracted paragraphs.
+    """
     paragraphs: list[str] = []
     current_paragraph_lines: list[str] = []
 
@@ -40,6 +55,8 @@ def _extract_paragraphs(text: str) -> list[str]:
 
 
 def _read_corpus_paragraphs(data_path: Path) -> list[str]:
+    #read the corpus files and extract paragraphs from them, returning a list of paragraphs. 
+    # Each paragraph is a string of text, and paragraphs are separated by one or more blank lines in the original text files.
     paragraphs: list[str] = []
     for file_path in _list_corpus_files(data_path):
         text = file_path.read_text(encoding="utf-8")
@@ -53,6 +70,8 @@ def _read_corpus_paragraphs(data_path: Path) -> list[str]:
 
 
 def _split_into_windows(paragraphs: list[str], window_size: int, validation_fraction: float, seed: int) -> tuple[list[str], list[str]]:
+    #split the given paragraphs into training and validation sets, where the validation set is a random sample of the paragraphs according to the given validation_fraction.
+    #the window is the number of characters in each training example, and the paragraphs should be split into windows of this size (with some overlap if necessary) before being returned as the training set. The validation set should consist of whole paragraphs
     if window_size <= 0:
         raise ValueError("window_size must be positive")
 
@@ -77,6 +96,7 @@ def _tokenize_windows(tokenizer: data.CharTokenizer, windows: list[str]) -> list
 
 
 def _random_order_data_iterator(sequences: list[list[int]], desired_length: int, seed: int):
+    # Return an infinite iterator that samples random windows of the given desired_length from the given sequences. The windows should be sampled in random order, and the random seed should be used to ensure reproducibility. Each window should be a contiguous slice of a single sequence, and the starting point of the window should be chosen uniformly at random from all valid starting points in the sequence.
     eligible_sequences = [seq for seq in sequences if len(seq) >= desired_length]
     if not eligible_sequences:
         raise ValueError(
@@ -95,6 +115,7 @@ def _random_order_data_iterator(sequences: list[list[int]], desired_length: int,
 
 
 def _iter_fixed_length_chunks(sequences: list[list[int]], desired_length: int):
+    # Return an iterator that yields fixed-length chunks of the given desired_length from the given sequences. The chunks should be non-overlapping and should be taken sequentially from the sequences. If a sequence is not long enough to yield a full chunk, it should be skipped.
     for seq in sequences:
         if len(seq) < desired_length:
             continue
@@ -103,6 +124,7 @@ def _iter_fixed_length_chunks(sequences: list[list[int]], desired_length: int):
 
 
 def _evaluate(model: torch.nn.Module, validation_sequences: list[list[int]], batch_size: int, desired_length: int) -> float:
+    # Evaluate the given model on the validation set, using the given batch size and desired length for the input sequences. The function should return the average loss over the validation set. The model should be put in evaluation mode during this process, and then returned to training mode before the function returns. The loss should be computed using the same compute_loss function as in training, and should ignore padding tokens.
     model.eval()
     total_loss = 0.0
     total_batches = 0
@@ -354,7 +376,6 @@ def _run_single_trial(
 
 
 def main(lang: Literal["en", "he"] = "en"):
-
 
     batch_size = 64
     validation_fraction = 0.1
