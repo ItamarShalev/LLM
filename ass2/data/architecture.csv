@@ -1,0 +1,11 @@
+model_id,hidden_size,head_dim,num_layers,num_attention_heads,num_kv_heads,mlp_size,activation,norm_type,position_encoding,context_length,vocab_size,moe_details
+meta-llama/Llama-3.1-8B-Instruct,4096,128,32,32,8,14336,silu,RMSNorm (pre-norm),"RoPE (theta=500000, scaling=llama3x8.0, max=131072)",131072,128256,NA
+mistralai/Mistral-7B-Instruct-v0.3,4096,128,32,32,8,14336,silu,RMSNorm (pre-norm),"RoPE (theta=1000000, max=32768)",32768,32768,NA
+Qwen/Qwen2.5-7B-Instruct,3584,128,28,28,4,18944,silu,RMSNorm (pre-norm),"RoPE (theta=1000000, max=32768)",32768,152064,NA
+allenai/OLMo-2-1124-7B-Instruct,4096,128,32,32,32,11008,silu,RMSNorm (reordered/post-norm + QK-norm),"RoPE (theta=500000, max=4096)",4096,100352,NA
+ibm-granite/granite-3.3-8b-instruct,4096,128,40,32,8,12800,silu,RMSNorm (pre-norm),"RoPE (theta=10000000, max=131072)",131072,49159,NA
+deepseek-ai/DeepSeek-V3,7168,56,61,128,128,18432,silu,RMSNorm (pre-norm),"RoPE (theta=10000, scaling=yarnx40, max=163840)",163840,129280,"MoE: 256 routed experts, 1 shared, top-8 active/token, expert_dim=2048, first 3 layers dense"
+HuggingFaceTB/SmolLM2-1.7B-Instruct,2048,64,24,32,32,8192,silu,RMSNorm (pre-norm),"RoPE (theta=130000, max=8192)",8192,49152,NA
+microsoft/Phi-4-mini-instruct,3072,128,32,24,8,8192,silu,RMSNorm (pre-norm),"RoPE (theta=10000, partial_rotary=0.75, scaling=longrope, max=131072)",131072,200064,NA
+tiiuae/Falcon3-7B-Instruct,3072,256,28,12,4,23040,silu,RMSNorm (pre-norm),"RoPE (theta=1000042, max=32768)",32768,131072,NA
+dicta-il/dictalm2.0-instruct,4096,128,32,32,8,14336,silu,RMSNorm (pre-norm),"RoPE (theta=10000, max=32768)",32768,33152,NA
