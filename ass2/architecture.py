@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from huggingface_hub import HfApi
 from transformers import AutoConfig, AutoModel
 
 
@@ -26,7 +27,25 @@ data_path.mkdir(exist_ok=True)
 architecture_file = data_path / "architecture.txt"
 hf_token = os.getenv("HF_TOKEN")
 
+
+def validate_hf_token() -> None:
+    if not hf_token:
+        return
+
+    token_info = HfApi().whoami(token=hf_token)
+    access_token = token_info.get("auth", {}).get("accessToken", {})
+    fine_grained = access_token.get("fineGrained", {})
+
+    if fine_grained and not fine_grained.get("canReadGatedRepos", False):
+        raise RuntimeError(
+            "Your current Hugging Face token cannot read gated repositories. "
+            "Create a new token with gated repo access enabled, or use a classic token, "
+            "then rerun this script."
+        )
+
 def extract_architectures():
+    validate_hf_token()
+
     with open(architecture_file, "w") as f:
         for model_name in models:
             try:
