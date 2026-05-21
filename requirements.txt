@@ -12,3 +12,4 @@ transformers>=4.57.5
 tqdm>=4.67.1
 python-bidi>=0.6.7
 python-dotenv>=1.2.1
+sentencepiece>=0.2.0

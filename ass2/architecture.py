@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from huggingface_hub import HfApi
-from transformers import AutoConfig, AutoModel
-from dataclasses import dataclass
+from transformers import AutoConfig, AutoModel, AutoTokenizer
+from dataclasses import dataclass, asdict, fields
 
 @dataclass(frozen=True)
 class ModelSpec:
@@ -21,6 +21,9 @@ class ModelSpec:
     def short_name(self) -> str:
         """The repo name without the owner prefix, e.g. ``Qwen2.5-7B-Instruct``."""
         return self.model_id.split("/")[-1]
+
+
+
 
 
 MODELS: tuple[ModelSpec, ...] = (
@@ -37,6 +40,8 @@ MODELS: tuple[ModelSpec, ...] = (
 )
 
 
+
+
 root: Path = Path(__file__).parent.parent
 current_ass_folder = root / "ass2"
 data_folder = current_ass_folder / "data"
@@ -46,8 +51,10 @@ data_folder.mkdir(exist_ok=True)
 
 
 architecture_raw_file = data_folder / "architecture_raw.txt"
+tokenizer_raw_file = data_folder / "tokenizer_raw.txt"
 architecture_txt_file = data_folder / "architecture.txt"
 architecture_csv_file = data_folder / "architecture.csv"
+tokenizer_csv_file = data_folder / "tokenizer.csv"
 
 hf_token = os.getenv("HF_TOKEN")
 
@@ -76,10 +83,30 @@ class ArchitectureRow:
     moe_details: str
 
     def __dict__(self):
-        return {field: getattr(self, field) for field in self.__dataclass_fields__}
+        return asdict(self)
 
     def __str__(self):
-        return ", ".join(f"{field}={getattr(self, field)}" for field in self.__dataclass_fields__)
+        return ", ".join(f"{field.name}={getattr(self, field.name)}" for field in fields(self))
+
+
+@dataclass(frozen=True)
+class TokenizerRow:
+    """One row of ``tokenizer.csv`` (field order is the CSV column order)."""
+
+    model_id: str
+    tokenizer_type: str
+    vocab_size: str
+    special_tokens: str
+    word_boundary_strategy: str
+    byte_fallback_or_byte_level: str
+    avg_tokens_per_english_word: str
+    avg_tokens_per_hebrew_word: str
+
+    def __dict__(self):
+        return asdict(self)
+
+    def __str__(self):
+        return ", ".join(f"{field.name}={getattr(self, field.name)}" for field in fields(self))
 
 
 def _first(cfg: Mapping[str, Any], *keys: str, default: Any = "NA") -> Any:
@@ -153,6 +180,92 @@ def _moe_details(cfg: Mapping[str, Any]) -> str:
         bits.append(f"first {first_dense} layers dense")
     return "MoE: " + ", ".join(bits)
 
+
+def _backend_pre_tokenizer(tokenizer: Any) -> Any:
+    backend = getattr(tokenizer, "backend_tokenizer", None)
+    return getattr(backend, "pre_tokenizer", None) if backend is not None else None
+
+
+def _special_tokens(tokenizer: Any) -> str:
+    parts: list[str] = []
+    for key in ("unk_token", "bos_token", "eos_token", "pad_token", "sep_token", "cls_token", "mask_token"):
+        value = getattr(tokenizer, key, None)
+        if value is not None:
+            parts.append(f"{key}={value!r}")
+
+    additional_special_tokens = getattr(tokenizer, "additional_special_tokens", None)
+    if additional_special_tokens:
+        parts.append(f"additional_special_tokens={list(additional_special_tokens)!r}")
+
+    return "; ".join(parts) if parts else "NA"
+
+
+def _word_boundary_strategy(tokenizer: Any) -> str:
+    init_kwargs = getattr(tokenizer, "init_kwargs", {})
+    pre_tokenizer = _backend_pre_tokenizer(tokenizer)
+    pre_tokenizer_desc = str(pre_tokenizer) if pre_tokenizer is not None else ""
+
+    if "ByteLevel" in pre_tokenizer_desc:
+        return "byte-level whitespace marker"
+    if "Metaspace" in pre_tokenizer_desc:
+        return "sentencepiece whitespace marker"
+    if init_kwargs.get("add_prefix_space") is True:
+        return "prefix-space whitespace marker"
+    if init_kwargs.get("sp_model_kwargs") is not None:
+        return "sentencepiece whitespace marker"
+    if pre_tokenizer_desc:
+        return pre_tokenizer_desc
+    return "NA"
+
+
+def _byte_fallback_or_byte_level(tokenizer: Any) -> str:
+    init_kwargs = getattr(tokenizer, "init_kwargs", {})
+    if "byte_fallback" in init_kwargs:
+        return f"byte_fallback={init_kwargs.get('byte_fallback')}"
+
+    pre_tokenizer = _backend_pre_tokenizer(tokenizer)
+    pre_tokenizer_desc = str(pre_tokenizer) if pre_tokenizer is not None else ""
+    if "ByteLevel" in pre_tokenizer_desc:
+        return "byte_level=True"
+    return "byte_level=False"
+
+
+def _tokenizer_na_row(model_id: str) -> TokenizerRow:
+    values = {field.name: ("NA" if field.name != "model_id" else model_id) for field in fields(TokenizerRow)}
+    return TokenizerRow(**values)
+
+
+def extract_tokenizer_row(spec: ModelSpec) -> TokenizerRow:
+    tokenizer = AutoTokenizer.from_pretrained(
+        spec.model_id,
+        token=hf_token,
+        trust_remote_code=spec.trust_remote_code,
+        use_fast=True,
+    )
+
+    return TokenizerRow(
+        model_id=spec.model_id,
+        tokenizer_type=tokenizer.__class__.__name__,
+        vocab_size=str(getattr(tokenizer, "vocab_size", "NA")),
+        special_tokens=_special_tokens(tokenizer),
+        word_boundary_strategy=_word_boundary_strategy(tokenizer),
+        byte_fallback_or_byte_level=_byte_fallback_or_byte_level(tokenizer),
+        avg_tokens_per_english_word="NA",
+        avg_tokens_per_hebrew_word="NA",
+    )
+
+
+def build_tokenizer_rows(models: Iterable[ModelSpec]) -> list[TokenizerRow]:
+    rows: list[TokenizerRow] = []
+    for spec in models:
+        try:
+            rows.append(extract_tokenizer_row(spec))
+            print(f"Extracted tokenizer info for {spec.model_id}")
+        except Exception as exc:  # noqa: BLE001 - report and continue per model
+            print(f"Error extracting tokenizer info for {spec.model_id}: {exc}")
+            rows.append(_tokenizer_na_row(spec.model_id))
+    return rows
+
 def _head_dim(cfg: Mapping[str, Any]) -> str:
     """head_dim מהקונפיג, או חישוב hidden_size / num_attention_heads כשחסר."""
     head_dim = cfg.get("head_dim")
@@ -203,7 +316,7 @@ def validate_hf_token() -> None:
 def extract_raw_architectures(models: Iterable[ModelSpec]) -> None:
     validate_hf_token()
 
-    with open(architecture_raw_file, "w") as f:
+    with open(architecture_raw_file, "w", encoding="utf-8") as f:
         for model in models:
             try:
                 config = AutoConfig.from_pretrained(model.model_id, token=hf_token)
@@ -219,7 +332,7 @@ def extract_raw_architectures(models: Iterable[ModelSpec]) -> None:
             f.write("\n\n\n")
 
 def _na_row(model_id: str) -> ArchitectureRow:
-    values = {name: ("NA" if name != "model_id" else model_id) for name in CSV_COLUMNS}
+    values = {field.name: ("NA" if field.name != "model_id" else model_id) for field in fields(ArchitectureRow)}
     return ArchitectureRow(**values)
 
 
@@ -237,20 +350,49 @@ def build_rows(models: Iterable[ModelSpec]) -> list[ArchitectureRow]:
 
 
 def export_txt(rows: Iterable[ArchitectureRow], path: Path) -> None:
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         for row in rows:
-            for field in row.__dataclass_fields__:
-                f.write(f"{field}: {getattr(row, field)}\n")
+            for field in fields(row):
+                f.write(f"{field.name}: {getattr(row, field.name)}\n")
             f.write("\n\n\n")
 
 def export_csv(rows: Iterable[ArchitectureRow], path: Path) -> None:
     import csv
 
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=ArchitectureRow.__dataclass_fields__.keys())
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=[field.name for field in fields(ArchitectureRow)])
         writer.writeheader()
         for row in rows:
-            writer.writerow(row.__dict__())
+            writer.writerow(asdict(row))
+
+
+def export_tokenizer_csv(rows: Iterable[TokenizerRow], path: Path) -> None:
+    import csv
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=[field.name for field in fields(TokenizerRow)])
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(asdict(row))
+
+def get_tokenizer_info_naive(models: Iterable[ModelSpec], file: Path) -> None:
+    with open(file, "w", encoding="utf-8") as f:
+        for model in models:
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(
+                    model.model_id,
+                    token=hf_token,
+                    trust_remote_code=model.trust_remote_code,
+                    use_fast=True,
+                )
+                for key, value in tokenizer.init_kwargs.items():
+                    f.write(f"{model.model_id}: {key}={value!r}\n")
+                f.write("\n\n\n")
+            except Exception as e:
+                print(f"Error loading tokenizer for {model.model_id}: {e}")
+                f.write(f"{model.model_id}: Error loading tokenizer: {e}\n\n\n")
+            
+
 
 
 def main():
@@ -258,6 +400,8 @@ def main():
     rows = build_rows(MODELS)
     export_txt(rows, architecture_txt_file)
     export_csv(rows, architecture_csv_file)
+    tokenizer_rows = build_tokenizer_rows(MODELS)
+    export_tokenizer_csv(tokenizer_rows, tokenizer_csv_file)
 
 
 
