@@ -1,0 +1,19 @@
+# Core (Parts 1 and 2: read configs + tokenizers, no GPU needed)
+transformers>=4.45
+tokenizers>=0.20
+sentencepiece>=0.2.0
+protobuf>=4.25
+requests>=2.31
+
+# Parts 3 and 4 (GPU): load models, constrained decoding, LoRA fine-tuning
+torch>=2.2
+accelerate>=0.34
+peft>=0.13
+datasets>=2.20
+
+# Data generation for Part 4 (optional, only for the online data path)
+openai>=1.40
+
+# Report rendering to PDF (optional; without it the HTML can be printed to PDF)
+weasyprint>=62
+markdown>=3.6

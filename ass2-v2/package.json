@@ -1,0 +1,12 @@
+{
+  "name": "llm-ass2-report",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Word (.docx) report generator for LLM Assignment 2",
+  "scripts": {
+    "report:docx": "node report/build_report_docx.js"
+  },
+  "dependencies": {
+    "docx": "^9.0.0"
+  }
+}

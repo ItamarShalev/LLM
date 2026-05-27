@@ -1,0 +1,18 @@
+# Pre-commit hooks for the Astral toolchain. Install once with:
+#   uv run pre-commit install
+# Then every commit runs lint, format, and type checks automatically.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
+    hooks:
+      - id: ruff
+        name: ruff lint
+        args: [--fix]
+      - id: ruff-format
+        name: ruff format
+
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: 0.0.39
+    hooks:
+      - id: ty
+        name: ty type check
