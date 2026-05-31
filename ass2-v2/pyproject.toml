@@ -12,6 +12,9 @@ dependencies = [
     "requests>=2.31",
     "torch>=2.12.0",
     "accelerate>=1.13.0",
+    "openai>=2.38.0",
+    "peft>=0.19.1",
+    "playwright>=1.60.0",
 ]
 
 # GPU parts (Parts 3 and 4) and optional extras. Installed on demand so the

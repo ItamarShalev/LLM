@@ -79,8 +79,8 @@ def collate(batch, pad_id):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--epochs", type=float, default=3)
-    ap.add_argument("--batch-size", type=int, default=8)
+    ap.add_argument("--epochs", type=float, default=5)
+    ap.add_argument("--batch-size", type=int, default=4)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--max-len", type=int, default=512)
     ap.add_argument("--rank", type=int, default=16)
@@ -127,7 +127,7 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=1,
         learning_rate=args.lr,
-        warmup_ratio=0.05,
+        warmup_steps=0.05,
         logging_steps=10,
         save_strategy="no",
         bf16=torch.cuda.is_available(),

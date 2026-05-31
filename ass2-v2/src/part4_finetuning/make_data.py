@@ -9,7 +9,7 @@ messages format that train_lora.py consumes.
 Two sources, combined:
   * A handwritten offline seed (SEED_PAIRS below) so the whole pipeline runs and
     can be sanity-checked even before any API key is set.
-  * A GPT-generated bulk set (default model gpt-5.4-mini, override with
+    * A GPT-generated bulk set (default model gpt-5.4-mini, override with
     OPENAI_MODEL). GPT first proposes diverse English instructions across many
     categories, then answers each one concisely in natural Hebrew.
 
@@ -85,12 +85,23 @@ def norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().lower())
 
 
-def _client():
-    from openai import OpenAI
+def _client() -> object | None:
+    try:
+        from openai import OpenAI
+    except ModuleNotFoundError:
+        print(
+            "[warn] openai is not installed; falling back to the handwritten seed only.",
+            file=sys.stderr,
+        )
+        return None
 
     key = C.openai_api_key()
     if not key:
-        raise RuntimeError("No OPENAI_API_KEY / TOKEN_KEY in environment.")
+        print(
+            "[warn] No OPENAI_API_KEY / TOKEN_KEY in environment; falling back to the handwritten seed only.",
+            file=sys.stderr,
+        )
+        return None
     return OpenAI(api_key=key)
 
 
@@ -172,18 +183,19 @@ def main() -> None:
 
     if not args.offline:
         client = _client()
-        prompts = gen_english_prompts(client, args.n)
-        print(f"[gpt] generated {len(prompts)} candidate English prompts")
-        for i, p in enumerate(prompts, 1):
-            try:
-                ans = gen_hebrew_answer(client, p)
-            except Exception as e:
-                print(f"  [skip] {p[:40]!r}: {e}", file=sys.stderr)
-                continue
-            if is_hebrew(ans):
-                pairs.append((p, ans))
-            if i % 25 == 0:
-                print(f"  ...{i}/{len(prompts)} answered")
+        if client is not None:
+            prompts = gen_english_prompts(client, args.n)
+            print(f"[gpt] generated {len(prompts)} candidate English prompts")
+            for i, p in enumerate(prompts, 1):
+                try:
+                    ans = gen_hebrew_answer(client, p)
+                except Exception as e:
+                    print(f"  [skip] {p[:40]!r}: {e}", file=sys.stderr)
+                    continue
+                if is_hebrew(ans):
+                    pairs.append((p, ans))
+                if i % 25 == 0:
+                    print(f"  ...{i}/{len(prompts)} answered")
 
     # final safety filter against the held-out set
     pairs = [(en, he) for en, he in pairs if norm(en) not in held]
