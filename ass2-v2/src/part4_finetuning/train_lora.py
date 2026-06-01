@@ -79,7 +79,7 @@ def collate(batch, pad_id):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--epochs", type=float, default=5)
+    ap.add_argument("--epochs", type=float, default=10)
     ap.add_argument("--batch-size", type=int, default=4)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--max-len", type=int, default=512)
