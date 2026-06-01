@@ -70,8 +70,14 @@ def load_model(model_id, device, dtype):
     return tok, model
 
 
-def chat_prompt(tok, query):
-    msgs = [{"role": "user", "content": query}]
+def chat_prompt(tok, query, system: str | None = None):
+    """Build the chat prompt text. If `system` is provided it becomes the
+    leading system message (useful to instruct the model to answer in Hebrew).
+    """
+    if system:
+        msgs = [{"role": "system", "content": system}, {"role": "user", "content": query}]
+    else:
+        msgs = [{"role": "user", "content": query}]
     return tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
 
 
@@ -147,7 +153,23 @@ def main() -> None:
             allowed = load_allowed_ids(allowed_file)
             proc = build_processor(tok, allowed)
             for q in pending:
-                p = chat_prompt(tok, q)
+                # Instruct the model at the system level to answer in Hebrew.
+                heb_sys = (
+                    "You are a helpful assistant. You ALWAYS answer in natural, fluent Hebrew, "
+                    "regardless of the language of the question. Keep answers concise (1-4 sentences)."
+                )
+                mid = model_id.lower()
+                # Qwen: pass as system prompt. Mistral: include instruction in
+                # the user message (some Mistral chat templates treat system
+                # messages differently), so we prepend the instruction to the
+                # user query for Mistral.
+                if mid.startswith("qwen/"):
+                    p = chat_prompt(tok, q, system=heb_sys)
+                elif "mistral" in mid:
+                    user_q = heb_sys + "\n\n" + q
+                    p = chat_prompt(tok, user_q, system=None)
+                else:
+                    p = chat_prompt(tok, q, system=heb_sys)
                 uncon = generate(tok, model, p, args.max_new_tokens, processor=None)
                 con = generate(tok, model, p, args.max_new_tokens, processor=proc)
                 rec = {
