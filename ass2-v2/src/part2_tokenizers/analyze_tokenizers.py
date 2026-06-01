@@ -70,7 +70,7 @@ def special_tokens_summary(tok) -> str:
 
 
 def avg_tokens_per_word(tok, text: str) -> float:
-    n_tokens = len(tok.encode(text, add_special_tokens=False))
+    n_tokens = len(tok.encode(text, add_special_tokens=False, truncation=False))
     n_words = len(text.split())
     return round(n_tokens / n_words, 3)
 

@@ -12,7 +12,41 @@ assignment. `EVAL_INPUTS_OWN` are ten additional prompts of our choosing. The
 union of these twenty is the held-out set that must NEVER appear in training data
 (see src/part4_finetuning/make_data.py, which filters against it).
 """
+import json
+import os
+from datasets import load_dataset
+from huggingface_hub import hf_hub_download
+_hf_token = os.getenv("HUGGINGFACE_HUB_TOKEN")
 
+en_corpus = load_dataset("wikitext", "wikitext-103-v1", split="test")
+ENGLISH_SAMPLE = " ".join([item["text"] for item in en_corpus if item["text"].strip()][:10000])
+
+def _load_hebrew_texts() -> list[str]:
+    dataset_path = hf_hub_download(
+        "YanFren/Hebrew_wikipedia",
+        repo_type="dataset",
+        filename="dataset.jsonl",
+        token=_hf_token,
+    )
+    texts: list[str] = []
+
+    with open(dataset_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+
+            item = json.loads(line)
+            paragraphs = item.get("paragraphs", [])
+            if isinstance(paragraphs, list):
+                texts.extend(paragraph for paragraph in paragraphs if paragraph.strip())
+
+    return texts[:10000]
+
+
+HEBREW_SAMPLE = " ".join(_load_hebrew_texts())
+
+
+"""
 ENGLISH_SAMPLE = (
     "The morning train was almost empty when she finally found a seat by the window. "
     "Outside, the fields slipped past in long green stripes, broken now and then by a "
@@ -23,7 +57,9 @@ ENGLISH_SAMPLE = (
     "By the time the announcement crackled through the speakers, she had filled three pages "
     "and felt, for the first time in weeks, that the day might actually go well."
 )
+"""
 
+"""
 HEBREW_SAMPLE = (
     "הרכבת של הבוקר הייתה כמעט ריקה כשהיא סוף סוף מצאה מקום ליד החלון. "
     "בחוץ חלפו השדות בפסים ארוכים וירוקים, שנקטעו פה ושם בבית חווה או בשורה של עצים גבוהים. "
@@ -32,6 +68,7 @@ HEBREW_SAMPLE = (
     "אבל כבר עכשיו השמיים מעל הנהר נראו בהירים יותר מאשר בבית. עד שההודעה נשמעה ברמקולים, "
     "היא כבר מילאה שלושה עמודים והרגישה, לראשונה מזה שבועות, שהיום אולי באמת יעבור בטוב."
 )
+"""
 
 EVAL_INPUTS_PROVIDED = [
     "Explain why the sky looks blue during the day.",

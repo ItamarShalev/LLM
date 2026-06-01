@@ -15,6 +15,7 @@ dependencies = [
     "openai>=2.38.0",
     "peft>=0.19.1",
     "playwright>=1.60.0",
+    "datasets>=4.8.5",
 ]
 
 # GPU parts (Parts 3 and 4) and optional extras. Installed on demand so the
