@@ -85,6 +85,21 @@ def norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().lower())
 
 
+def add_pair(
+    pairs: list[tuple[str, str]],
+    seen: set[str],
+    held: set[str],
+    en: str,
+    he: str,
+) -> bool:
+    key = norm(en)
+    if key in held or key in seen:
+        return False
+    seen.add(key)
+    pairs.append((en, he))
+    return True
+
+
 def _client() -> object | None:
     try:
         from openai import OpenAI
@@ -138,7 +153,12 @@ def gen_english_prompts(client, n: int) -> list[str]:
     for cat in CATEGORIES:
         txt = _chat(
             client,
-            "You generate short, clear English user instructions for a chatbot. "
+            "You generate short, clear English instructions or questions that would come from a user for a chatbot. "
+            "The question or instruction should not reference some context that was not included in the instruction itself."
+            f"Questions or instructions are similar in nature to the following: {" ".join([qa[0] for qa in SEED_PAIRS])} ... but should be varied and cover the category of {cat}."
+            "The instructions should be suitable for a general-purpose assistant to answer, not require specialized knowledge or niche expertise. Yet at the same time should not be too generic, common or bland. Avoid instructions that are just asking for lists of items (e.g. 'Name some fruits') or that are too similar to the held-out evaluation set which as follows "
+            f"{' '.join(EVAL_INPUTS_ALL)}."
+            "All questions or instructions should be different from each other" 
             "Return one instruction per line, no numbering, no quotes.",
             f"Write {per} varied English instructions about: {cat}. Keep each under 20 words.",
             max_tokens=800,
@@ -171,34 +191,49 @@ def gen_hebrew_answer(client, english_prompt: str) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=300, help="approx number of GPT examples")
+    ap.add_argument("--n", type=int, default=300, help="minimum number of final training examples")
     ap.add_argument("--offline", action="store_true", help="seed only, no API calls")
     args = ap.parse_args()
 
     pairs: list[tuple[str, str]] = []
+    seen: set[str] = set()
     held = {norm(x) for x in EVAL_INPUTS_ALL}
     for en, he in SEED_PAIRS:
-        if norm(en) not in held:
-            pairs.append((en, he))
+        add_pair(pairs, seen, held, en, he)
 
     if not args.offline:
         client = _client()
         if client is not None:
-            prompts = gen_english_prompts(client, args.n)
-            print(f"[gpt] generated {len(prompts)} candidate English prompts")
-            for i, p in enumerate(prompts, 1):
-                try:
-                    ans = gen_hebrew_answer(client, p)
-                except Exception as e:
-                    print(f"  [skip] {p[:40]!r}: {e}", file=sys.stderr)
-                    continue
-                if is_hebrew(ans):
-                    pairs.append((p, ans))
-                if i % 25 == 0:
-                    print(f"  ...{i}/{len(prompts)} answered")
+            max_rounds = max(5, min(40, args.n // 100 + 5))
+            round_idx = 0
+            while len(pairs) < args.n and round_idx < max_rounds:
+                remaining = args.n - len(pairs)
+                request_n = min(max(200, remaining * 2), 800)
+                prompts = gen_english_prompts(client, request_n)
+                print(
+                    f"[gpt] round {round_idx + 1}/{max_rounds}: requested {request_n}, "
+                    f"got {len(prompts)} candidate English prompts"
+                )
+                accepted_before = len(pairs)
+                for i, p in enumerate(prompts, 1):
+                    try:
+                        ans = gen_hebrew_answer(client, p)
+                    except Exception as e:
+                        print(f"  [skip] {p[:40]!r}: {e}", file=sys.stderr)
+                        continue
+                    if is_hebrew(ans):
+                        add_pair(pairs, seen, held, p, ans)
+                    if i % 25 == 0:
+                        print(f"  ...{i}/{len(prompts)} answered")
+                accepted = len(pairs) - accepted_before
+                print(f"  accepted {accepted} new examples (total {len(pairs)}/{args.n})")
+                round_idx += 1
 
-    # final safety filter against the held-out set
-    pairs = [(en, he) for en, he in pairs if norm(en) not in held]
+            if len(pairs) < args.n:
+                raise RuntimeError(
+                    f"Could only assemble {len(pairs)} examples after {round_idx} rounds; "
+                    f"target was {args.n}."
+                )
 
     with TRAIN_FILE.open("w", encoding="utf-8") as f:
         for en, he in pairs:
