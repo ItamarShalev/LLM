@@ -58,8 +58,8 @@ def build_dataset(tokenizer, max_len: int):
         def __len__(self):
             return len(feats)
 
-        def __getitem__(self, i):
-            return feats[i]
+        def __getitem__(self, index):
+            return feats[index]
 
     return DS()
 
@@ -99,7 +99,7 @@ def main() -> None:
     model: Any = AutoModelForCausalLM.from_pretrained(
         C.FINETUNE_MODEL,
         token=C.hf_token(),
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
     lora = LoraConfig(
         r=args.rank,
@@ -142,8 +142,8 @@ def main() -> None:
     trainer.train()
 
     ADAPTER_DIR.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(ADAPTER_DIR)
-    tok.save_pretrained(ADAPTER_DIR)
+    model.save_pretrained(str(ADAPTER_DIR))
+    tok.save_pretrained(str(ADAPTER_DIR))
     print(f"\nSaved LoRA adapter to {ADAPTER_DIR}")
 
 

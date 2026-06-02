@@ -114,7 +114,7 @@ def main() -> None:
     if not args.no_base:
         print(f"Loading base model {C.FINETUNE_MODEL} ...")
         base: Any = AutoModelForCausalLM.from_pretrained(
-            C.FINETUNE_MODEL, torch_dtype=dtype, token=C.hf_token()
+            C.FINETUNE_MODEL, dtype=dtype, token=C.hf_token()
         )
         base = base.to(device)
         base.eval()
@@ -132,7 +132,7 @@ def main() -> None:
     from peft import PeftModel
 
     ft_base: Any = AutoModelForCausalLM.from_pretrained(
-        C.FINETUNE_MODEL, torch_dtype=dtype, token=C.hf_token()
+        C.FINETUNE_MODEL, dtype=dtype, token=C.hf_token()
     )
     ft_base = ft_base.to(device)
     ft: Any = PeftModel.from_pretrained(ft_base, str(ADAPTER_DIR))
