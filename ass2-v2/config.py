@@ -45,6 +45,15 @@ def _load_dotenv_into_environ() -> None:
 
 
 _load_dotenv_into_environ()
+
+# Quiet transformers' WARNING-level chatter for the whole pipeline. The main
+# offender is the `torch_dtype is deprecated, use dtype instead` notice that
+# transformers 5.x logs whenever a model's own config.json still carries the
+# legacy `torch_dtype` field - which we cannot edit (they are upstream Hub
+# configs). Setting this before transformers is imported keeps pipeline output
+# clean; genuine ERROR-level messages still show. User-set values win.
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+
 SRC = ROOT / "src"
 DATA = ROOT / "data"
 TRAIN_DIR = DATA / "train"
