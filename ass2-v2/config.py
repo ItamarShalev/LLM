@@ -195,7 +195,6 @@ ARCHITECTURE_COLUMNS = [
 ARCHITECTURE_EXTRA_COLUMNS = [
     "head_dim",
     "kv_group_size",
-    "rope_theta",
     "tie_word_embeddings",
     "params_billions_approx",
     "source",

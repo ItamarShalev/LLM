@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import requests
+from transformers import AutoConfig
 
 # Allow running as a script or a module.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -37,42 +37,46 @@ import config as C
 
 
 def fetch_config(model_id: str, offline: bool, refresh: bool = False) -> dict[str, Any]:
-    """Return the parsed config.json for a model, caching it under .cache/."""
-    cache_file = C.CACHE_DIR / (model_id.replace("/", "__") + ".config.json")
-    if cache_file.exists() and not refresh:
-        return json.loads(cache_file.read_text())
-    if offline:
-        raise FileNotFoundError(f"No cached config for {model_id} and --offline set")
-
-    headers = {}
+    """Return the parsed configuration for a model using AutoConfig.
+    
+    Rely on HF's native caching. Maps gated models to mirrors if access fails.
+    """
     tok = C.hf_token()
-    if tok:
-        headers["Authorization"] = f"Bearer {tok}"
     repo = C.resolve_repo(model_id)
-    url = f"https://huggingface.co/{repo}/resolve/main/config.json"
-    r = requests.get(url, headers=headers, timeout=60)
-    if r.status_code == 401:
-        # Gated and no token: fall back to a verified public mirror if available.
+    
+    # Try the main repo first
+    try:
+        config = AutoConfig.from_pretrained(
+            repo,
+            local_files_only=offline,
+            force_download=refresh,
+            token=tok,
+            trust_remote_code=True,
+        )
+        return config.to_dict()
+    except Exception as e:
+        # Fall back to public mirror if primary failed (likely gated issue or connection)
         mirror = C.PUBLIC_MIRROR.get(model_id)
         if mirror and mirror != repo:
-            r = requests.get(
-                f"https://huggingface.co/{mirror}/resolve/main/config.json", timeout=60
-            )
-        if r.status_code == 401:
-            raise PermissionError(
-                f"{model_id} is gated. Set HF_TOKEN and accept the license on the Hub."
-            )
-    r.raise_for_status()
-    cache_file.write_text(r.text)
-    return r.json()
+            try:
+                config = AutoConfig.from_pretrained(
+                    mirror,
+                    local_files_only=offline,
+                    force_download=refresh,
+                    trust_remote_code=True,
+                )
+                return config.to_dict()
+            except Exception:
+                pass
+        raise e
 
 
-def approx_params_billions(cfg: dict[str, Any]) -> float | None:
-    """Rough parameter count from the main config fields (dense models only).
+def approx_params_billions(cfg: dict[str, Any]) -> str | float | None:
+    """Rough parameter count from the main config fields, supporting both dense models
+    and MoE / MLA architectures (like DeepSeek-V3).
 
-    Counts embeddings, per-layer attention (q/k/v/o) and a SwiGLU gated MLP
-    (gate + up + down), plus final norm and the unembedding when untied. This is
-    an estimate and is reported as such; it is intentionally skipped for MoE.
+    Counts embeddings, attention (standard Q/K/V/O or MLA low-rank projections),
+    and MLP (standard dense SwiGLU or Mixture-of-Experts routing + experts).
     """
     h = cfg.get("hidden_size")
     L = cfg.get("num_hidden_layers")
@@ -82,19 +86,89 @@ def approx_params_billions(cfg: dict[str, Any]) -> float | None:
     n_kv = cfg.get("num_key_value_heads", n_heads)
     if h is None or L is None or V is None or inter is None or n_heads is None:
         return None
-    if cfg.get("model_type") == "deepseek_v3":
-        return None  # MoE: not captured by the dense formula
-    head_dim = cfg.get("head_dim", h // n_heads)
-    q = h * (n_heads * head_dim)
-    kv = 2 * h * (n_kv * head_dim)
-    o = (n_heads * head_dim) * h
-    attn = q + kv + o
-    mlp = 3 * h * inter  # gate, up, down for SwiGLU
-    per_layer = attn + mlp
+
+    is_mla = cfg.get("kv_lora_rank") is not None
+    is_moe = cfg.get("n_routed_experts") is not None or cfg.get("num_local_experts") is not None
+
+    # 1. Attention layer parameters
+    if is_mla:
+        kv_lora_rank = cfg.get("kv_lora_rank")
+        q_lora_rank = cfg.get("q_lora_rank")
+        qk_nope_head_dim = cfg.get("qk_nope_head_dim")
+        qk_rope_head_dim = cfg.get("qk_rope_head_dim")
+        v_head_dim = cfg.get("v_head_dim")
+
+        if kv_lora_rank and q_lora_rank and qk_nope_head_dim and qk_rope_head_dim and v_head_dim:
+            # Query projections: q_a_proj (h -> q_lora_rank) + q_b_proj (q_lora_rank -> n_heads * (qk_nope_head_dim + qk_rope_head_dim))
+            q_a = h * q_lora_rank
+            q_b = q_lora_rank * n_heads * (qk_nope_head_dim + qk_rope_head_dim)
+            q_proj = q_a + q_b
+
+            # KV projections: kv_a_proj_with_mqa (h -> kv_lora_rank + qk_rope_head_dim)
+            kv_a = h * (kv_lora_rank + qk_rope_head_dim)
+            # kv_b_proj (kv_lora_rank -> n_heads * (qk_nope_head_dim + v_head_dim))
+            kv_b = kv_lora_rank * n_heads * (qk_nope_head_dim + v_head_dim)
+            kv_proj = kv_a + kv_b
+
+            # O projection: o_proj (n_heads * v_head_dim -> h)
+            o_proj = (n_heads * v_head_dim) * h
+            attn = q_proj + kv_proj + o_proj
+        else:
+            # Fallback to standard attention formula if MLA keys are missing
+            head_dim = cfg.get("head_dim", h // n_heads)
+            q = h * (n_heads * head_dim)
+            kv = 2 * h * (n_kv * head_dim)
+            o = (n_heads * head_dim) * h
+            attn = q + kv + o
+    else:
+        # Standard GQA / MHA Attention
+        head_dim = cfg.get("head_dim", h // n_heads)
+        q = h * (n_heads * head_dim)
+        kv = 2 * h * (n_kv * head_dim)
+        o = (n_heads * head_dim) * h
+        attn = q + kv + o
+
+    # 2. MLP layer parameters
+    if is_moe:
+        n_routed = cfg.get("n_routed_experts") or cfg.get("num_local_experts", 0)
+        n_shared = cfg.get("n_shared_experts", 0)
+        moe_inter = cfg.get("moe_intermediate_size") or cfg.get("expert_intermediate_size") or inter
+        
+        first_k_dense = cfg.get("first_k_dense_replace", 0)
+        
+        # Dense layers (e.g. first 3 layers in DeepSeek-V3 are dense)
+        dense_mlp = 3 * h * inter
+        
+        # MoE layers (total experts)
+        # Each expert is a SwiGLU MLP: 3 * h * moe_inter
+        expert_params = 3 * h * moe_inter
+        moe_mlp_total = (n_routed + n_shared) * expert_params + h * n_routed # expert weights + router weight
+        
+        # Total MLP parameters across all layers
+        mlp_total = (dense_mlp * first_k_dense) + (moe_mlp_total * (L - first_k_dense))
+        
+        # Active MLP parameters (per token)
+        n_active_routed = cfg.get("num_experts_per_tok", 0)
+        moe_mlp_active = (n_active_routed + n_shared) * expert_params + h * n_routed
+        mlp_active = (dense_mlp * first_k_dense) + (moe_mlp_active * (L - first_k_dense))
+    else:
+        # Standard dense MLP
+        mlp_total = (3 * h * inter) * L
+        mlp_active = mlp_total
+
+    # 3. Embeddings
     emb = V * h
     tied = cfg.get("tie_word_embeddings", False)
-    total = emb * (1 if tied else 2) + per_layer * L
-    return round(total / 1e9, 2)
+    emb_total = emb * (1 if tied else 2)
+
+    # 4. Total and Active calculations
+    total = emb_total + (attn * L) + mlp_total
+    active = emb_total + (attn * L) + mlp_active
+
+    if is_moe:
+        return f"{round(total / 1e9, 2)} ({round(active / 1e9, 2)} active)"
+    else:
+        return round(total / 1e9, 2)
 
 
 def moe_details(cfg: dict[str, Any]) -> str:
@@ -118,18 +192,65 @@ def moe_details(cfg: dict[str, Any]) -> str:
 
 
 def position_encoding(cfg: dict[str, Any]) -> str:
-    mt = cfg.get("model_type", "")
     scaling = cfg.get("rope_scaling")
-    base = "RoPE"
-    if mt == "phi3":
-        prf = cfg.get("partial_rotary_factor")
+    rope_params = cfg.get("rope_parameters")
+    
+    # Check rope_parameters if rope_scaling is not set
+    if not scaling and isinstance(rope_params, dict):
+        if "rope_type" in rope_params or "type" in rope_params:
+            scaling = rope_params
+
+    # Dynamically detect partial rotary factor (e.g. Phi models)
+    prf = cfg.get("partial_rotary_factor")
+    if prf is None and isinstance(rope_params, dict):
+        prf = rope_params.get("partial_rotary_factor")
+
+    # Dynamically detect decoupled RoPE used in MLA models (e.g. DeepSeek)
+    qk_rope = cfg.get("qk_rope_head_dim")
+    if qk_rope is None and isinstance(rope_params, dict):
+        qk_rope = rope_params.get("qk_rope_head_dim")
+
+    if prf is not None:
         base = f"RoPE (partial, rotary_factor={prf})"
-    if mt == "deepseek_v3":
-        base = "decoupled RoPE (applied to qk_rope_head_dim only)"
+    elif qk_rope is not None:
+        base = f"decoupled RoPE (applied to qk_rope_head_dim={qk_rope})"
+    else:
+        base = "RoPE"
+
+    # Extract theta
+    rope_theta = cfg.get("rope_theta")
+    if rope_theta is None and isinstance(rope_params, dict):
+        rope_theta = rope_params.get("rope_theta")
+    
+    # Extract scaling details
+    scale_str = "None"
     if scaling:
-        stype = scaling.get("type") or scaling.get("rope_type") or "scaled"
-        base += f" + {stype} scaling"
-    return base
+        stype = scaling.get("rope_type") or scaling.get("type") or "scaled"
+        if stype != "default":
+            factor = scaling.get("factor")
+            if factor is not None:
+                scale_str = f"{stype}x{factor}"
+            else:
+                scale_str = stype
+
+    # Extract max context
+    max_pos = cfg.get("max_position_embeddings")
+
+    # Combine into a clean structured format
+    details = []
+    if rope_theta is not None:
+        t_val = int(rope_theta) if float(rope_theta).is_integer() else rope_theta
+        details.append(f"theta={t_val}")
+    else:
+        details.append("theta=NA")
+        
+    if scale_str != "None":
+        details.append(f"scaling={scale_str}")
+        
+    if max_pos is not None:
+        details.append(f"max={max_pos}")
+
+    return f"{base} ({', '.join(details)})"
 
 
 def extract_row(model_id: str, cfg: dict[str, Any], source: str) -> dict[str, Any]:
@@ -144,6 +265,11 @@ def extract_row(model_id: str, cfg: dict[str, Any], source: str) -> dict[str, An
     act = cfg.get("hidden_act", "NA")
     activation = f"{act} (SwiGLU gated MLP)" if act in ("silu", "swish") else act
     norm = C.NORM_PLACEMENT.get(cfg.get("model_type", ""), "RMSNorm (placement: see report)")
+    
+    rope_theta = cfg.get("rope_theta")
+    if rope_theta is None and "rope_parameters" in cfg:
+        rope_theta = cfg["rope_parameters"].get("rope_theta")
+        
     return {
         "model_id": model_id,
         "hidden_size": h,
@@ -160,7 +286,6 @@ def extract_row(model_id: str, cfg: dict[str, Any], source: str) -> dict[str, An
         # extras
         "head_dim": head_dim,
         "kv_group_size": (n_heads // n_kv) if (n_heads and n_kv) else None,
-        "rope_theta": cfg.get("rope_theta", "NA"),
         "tie_word_embeddings": cfg.get("tie_word_embeddings", "NA"),
         "params_billions_approx": approx_params_billions(cfg) or "NA",
         "source": source,
