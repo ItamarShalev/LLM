@@ -86,7 +86,7 @@ def analyze_one(model_id: str) -> dict:
     )
     return {
         "model_id": model_id,
-        "tokenizer_type": f"{family} BPE",
+        "tokenizer_type": "byte_level BPE" if family == "byte_level" else "SentencePiece",
         "vocab_size": len(tok),
         "special_tokens": special_tokens_summary(tok),
         "word_boundary_strategy": word_boundary_strategy(family),

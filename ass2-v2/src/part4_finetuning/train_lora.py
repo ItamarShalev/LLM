@@ -29,8 +29,8 @@ ADAPTER_DIR = C.OUTPUTS / "lora_adapter"
 
 
 def build_dataset(tokenizer, max_len: int):
-    """Tokenize each chat into input_ids + labels (prompt masked to -100)."""
     import torch
+    import json
 
     examples = [
         json.loads(line)
@@ -38,18 +38,29 @@ def build_dataset(tokenizer, max_len: int):
         if line.strip()
     ]
     feats = []
+    
+    # Tokenize the assistant generation header by itself to find its exact subword footprint
+    assistant_header = tokenizer("<|im_start|>assistant\n", add_special_tokens=False)["input_ids"]
+    
     for ex in examples:
         msgs = ex["messages"]
-        # Prompt = everything up to and including the assistant generation prefix.
-        prompt_text = tokenizer.apply_chat_template(
-            msgs[:-1], tokenize=False, add_generation_prompt=True
-        )
         full_text = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=False)
-        prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
         full_ids = tokenizer(full_text, add_special_tokens=False)["input_ids"][:max_len]
+        
         labels = list(full_ids)
-        for i in range(min(len(prompt_ids), len(labels))):
-            labels[i] = -100  # do not train on the English prompt
+        
+        # Locate the exact ending position of the assistant header within the full sequence
+        assistant_start_idx = len(labels)
+        for i in range(len(labels) - len(assistant_header) + 1):
+            if labels[i : i + len(assistant_header)] == assistant_header:
+                # The actual assistant response text starts immediately after this header
+                assistant_start_idx = i + len(assistant_header)
+                break
+        
+        # Mask everything from the user prompt up through the assistant header to -100
+        for i in range(min(assistant_start_idx, len(labels))):
+            labels[i] = -100
+            
         feats.append(
             {"input_ids": full_ids, "labels": labels, "attention_mask": [1] * len(full_ids)}
         )
@@ -79,11 +90,12 @@ def collate(batch, pad_id):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--epochs", type=float, default=12)
+    ap.add_argument("--epochs", type=float, default=3)
     ap.add_argument("--batch-size", type=int, default=4)
+    ap.add_argument("--gradient_accumulation_steps", type=int, default=4)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--max-len", type=int, default=512)
-    ap.add_argument("--rank", type=int, default=16)
+    ap.add_argument("--rank", type=int, default=32)
     args = ap.parse_args()
 
     from functools import partial
@@ -104,7 +116,7 @@ def main() -> None:
     lora = LoraConfig(
         r=args.rank,
         lora_alpha=2 * args.rank,
-        lora_dropout=0.05,
+        lora_dropout=0.01,
         bias="none",
         task_type="CAUSAL_LM",
         target_modules=[
@@ -125,13 +137,16 @@ def main() -> None:
         output_dir=str(C.OUTPUTS / "trainer_tmp"),
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=1,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         learning_rate=args.lr,
         warmup_steps=0.05,
         logging_steps=10,
         save_strategy="no",
         bf16=torch.cuda.is_available(),
         report_to=[],
+        weight_decay=0.01,
+        lr_scheduler_type="cosine",
+        disable_tqdm=False,
     )
     trainer = Trainer(
         model=model,
