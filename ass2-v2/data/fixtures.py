@@ -59,9 +59,7 @@ def _hf_token() -> str | None:
 def _load_english_sample() -> str:
     """Join the first lines of the wikitext-103 test split into one sample.
 
-    The legacy bare id ``wikitext`` is no longer a valid Hub repo id (newer
-    huggingface_hub requires ``namespace/name``); the canonical mirror is
-    ``Salesforce/wikitext``.
+
     """
     try:
         from datasets import load_dataset
