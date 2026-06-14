@@ -13,9 +13,6 @@ Writes two CSV files:
             - Qwen: passed as a system message
             - Mistral: prepended to the user prompt (Mistral chat template path)
 
-This script needs a GPU (or a patient CPU) and the model weights, so it is meant
-to run on Claude Code's machine. Everything it depends on (the allowed-token JSON
-files, the queries) is already produced by the lighter scripts.
 
 Usage:
     python -m src.part3_decoding.run_decoding

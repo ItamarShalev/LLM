@@ -1,17 +1,17 @@
 """
-Part 2 - Tokenization differences.
+Part 2 - Analysis of Tokenization Divergence.
 
-Finds an English text that the tokenizers split differently, prints the splits
-for the three most distinctive tokenizers, and reports how many of the remaining
-seven agree with each of those three. Writes a Markdown fragment for the report.
+Identifies English strings that trigger contrasting segmentation rules across 
+the ten target models. The script isolates the three most distinct tokenization 
+behaviors, quantifies how closely the remaining seven models align with each 
+baseline, and generates a formatted text fragment for the final report.
 
-Strategy: probe a small battery of texts that are known to stress tokenizers
-(long numbers, contractions, a rare/compound word, code-like punctuation,
-mixed case). For each text we group the ten models by their exact token-id
-*surface* sequence; the text with the most distinct groupings is chosen.
-
-Usage:
-    python -m src.part2_tokenizers.tokenization_diff
+Methodology:
+The pipeline evaluates a targeted set of challenging text inputs containing 
+multi-digit numbers, contractions, rare compound terms, code punctuation, and 
+mixed-case sequences. Models are grouped by their exact output subword sequences, 
+and the text sample that yields the highest variation in structural groupings 
+is selected for the final comparative baseline.
 """
 
 from __future__ import annotations
@@ -99,50 +99,11 @@ def main() -> None:
             f"({', '.join(x.split('/')[-1] for x in members)}).\n"
         )
 
-    lines.append(
-        "**Likely causes.** The splits diverge mainly because (a) the byte-level BPE "
-        "vocabularies were learned on different corpora, so multi-digit numbers, the "
-        "rare compound word and the contraction apostrophe are merged to different "
-        "depths; (b) the SentencePiece models (Mistral, DictaLM) treat the leading "
-        "space and punctuation differently from the byte-level models; and (c) the "
-        "very large vocabularies (Phi-4 at ~200k, Qwen at ~152k) tend to keep common "
-        "chunks whole where the smaller vocabularies (SmolLM2, Granite at ~49k) break "
-        "them into more pieces.\n"
-    )
 
-    lines.append(
-        "### Measurement method (avg tokens per word)\n\n"
-        "A 'word' is defined as a whitespace-delimited unit: we count words with "
-        "`text.split()` over a fixed prose sample (one English sample and one Hebrew "
-        "sample, identical across all ten tokenizers so the numbers are comparable). "
-        "For each tokenizer we encode the same sample without special tokens "
-        "(`encode(text, add_special_tokens=False)`), count the resulting tokens, and "
-        "report tokens divided by words. Using one shared sample removes corpus bias "
-        "from the comparison: every difference in the ratio is then attributable to the "
-        "tokenizer alone. Word-boundary marking is reported per model in tokenizers.csv: "
-        "byte-level BPE models mark a word start with the meta byte '\u0120' (U+0120, the "
-        "byte-level rendering of a leading space), while SentencePiece models use the "
-        "meta symbol '\u2581' (U+2581).\n\n"
-        "The Hebrew ratio is the most revealing number. English sits near 1.1 to 1.2 "
-        "tokens per word for every model. Hebrew splits far more: models with dedicated "
-        "Hebrew coverage (Phi-4-mini and Qwen near 1.9, DictaLM near 2.25, DeepSeek near "
-        "2.4) stay low, whereas English-centric vocabularies fall back toward bytes and "
-        "balloon to 4.5 to 5.8 tokens per Hebrew word (SmolLM2 highest, Llama and OLMo-2 "
-        "around 5). This is the practical cost of tokenizer coverage: the same Hebrew "
-        "sentence can be three times more expensive to process on one model than "
-        "another.\n"
-    )
-
-    out = C.REPORT_DIR / "sections" / "part2_diff.md"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines), encoding="utf-8")
-    # also dump raw per-model splits for the appendix
     (C.OUTPUTS / "tokenization_diff_detail.json").write_text(
         json.dumps({"text": text, "per_model": best["per_model"]}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print("\n".join(lines))
-    print(f"\n[wrote] {out}")
 
 
 if __name__ == "__main__":

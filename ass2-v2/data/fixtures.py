@@ -1,22 +1,5 @@
 """
 Shared text fixtures.
-
-`ENGLISH_SAMPLE` and `HEBREW_SAMPLE` are prose samples used only to estimate
-average-tokens-per-word in Part 2. They are sampled from real corpora at first
-use (English: Salesforce/wikitext wikitext-103; Hebrew: YanFren/Hebrew_wikipedia)
-so the token ratios reflect natural text. If the datasets cannot be reached, we
-fall back to short handwritten paragraphs so Part 2 still runs fully offline.
-
-These two samples are loaded lazily (PEP 562 module ``__getattr__``): importing
-the cheap constants below (``DECODING_QUERIES``, ``EVAL_INPUTS_*``) never touches
-the network, so Parts 3 and 4 and the offline unit tests stay download-free. The
-corpora are fetched only when ``ENGLISH_SAMPLE`` / ``HEBREW_SAMPLE`` are actually
-read, and the result is cached for the process.
-
-`EVAL_INPUTS_PROVIDED` are the ten English evaluation prompts mandated by the
-assignment. `EVAL_INPUTS_OWN` are ten additional prompts of our choosing. The
-union of these twenty is the held-out set that must NEVER appear in training data
-(see src/part4_finetuning/make_data.py, which filters against it).
 """
 
 from __future__ import annotations

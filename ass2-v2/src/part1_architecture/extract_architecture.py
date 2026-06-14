@@ -1,23 +1,22 @@
 """
-Part 1 - Architectural choices.
+Part 1: Model Architecture Data Extraction
 
-Extracts the architectural facts for each of the ten models straight from their
-`config.json` on the Hugging Face Hub, derives a few useful quantities
-(head_dim, GQA group size, approximate parameter count, MLP-to-hidden ratio),
-and writes `outputs/architecture.csv`.
+Fetches `config.json` from the Hugging Face Hub for ten specified models, computes 
+derived structural properties (head_dim, GQA group size, calculated parameter estimates, 
+and FFN ratios), and exports the results to `outputs/architecture.csv`.
 
-Why config.json: it is the single authoritative, machine-readable source for the
-structural hyper-parameters and it is what `transformers` itself reads to build
-the model. Facts that are NOT in config.json (norm placement, exact activation
-arrangement) are taken from the knowledge tables in config.py, which are cited in
-the report.
+Note: Features missing from native configs (e.g., layer norm placement) are fallback 
+mapped via hardcoded lookups in `config.py` (referenced in the report).
 
 Usage:
+    # Online mode (downloads missing configs)
     python -m src.part1_architecture.extract_architecture
-    python -m src.part1_architecture.extract_architecture --offline  # use .cache only
 
-Network: fetches https://huggingface.co/<id>/resolve/main/config.json. Gated
-models (Llama-3.1) need HF_TOKEN in the environment.
+    # Offline mode (local cache only)
+    python -m src.part1_architecture.extract_architecture --offline
+  
+Requirements:
+    - Gated repositories (e.g., Llama-3.1) require an active `HF_TOKEN` environment variable.
 """
 
 from __future__ import annotations

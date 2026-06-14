@@ -14,8 +14,6 @@ report can be skimmed quickly. The goal of the fine-tune is that the model answe
 in Hebrew while staying on-topic (a real answer, not a fixed canned string), so we
 measure exactly that.
 
-Requires a GPU with torch + peft (Colab T4 is enough for 1.5B).
-
 Usage:
     python -m src.part4_finetuning.evaluate
     python -m src.part4_finetuning.evaluate --max-new-tokens 256 --no-base

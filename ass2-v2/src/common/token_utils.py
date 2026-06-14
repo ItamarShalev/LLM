@@ -1,24 +1,25 @@
 """
-Shared token / text utilities used by Part 2 (tokenizer analysis) and Part 3
+Shared token/text utilities used by Part 2 (tokenizer analysis) and Part 3
 (Hebrew-allowed token identification + constrained decoding).
 
-The hard part is turning a single token id into the raw bytes / surface string it
-contributes, because the two tokenizer families encode this differently:
+The tricky part here is figuring out what a single token actually “means” in raw
+bytes or text, since different tokenizer families handle this very differently:
 
 * Byte-level BPE (GPT-2 style: Llama, Qwen, OLMo-2, Granite, Falcon3, SmolLM2,
-  Phi-4, DeepSeek). Every byte 0..255 is mapped to a printable Unicode char via
-  GPT-2's `bytes_to_unicode`. A leading space becomes the char 'Ġ' (U+0120). To
-  recover real bytes we invert that map. Hebrew letters are multi-byte in UTF-8,
-  so a token may hold a whole Hebrew word, a fragment, or even a single byte.
+  Phi-4, DeepSeek). In this setup, each byte (0–255) is mapped to a printable
+  Unicode character using GPT-2’s `bytes_to_unicode` scheme. A leading space is
+  typically represented as 'Ġ' (U+0120). To reconstruct the original bytes, we
+  invert that mapping. Because Hebrew text is UTF-8 encoded, a single token may
+  correspond to a full Hebrew word, a subword fragment, or just a single byte.
 
-* SentencePiece with byte fallback (Mistral v0.3, DictaLM). Normal pieces use the
-  '▁' (U+2581) meta-symbol for a leading space; rare/unseen bytes fall back to
-  single-byte tokens written as '<0xD7>'. Hebrew is usually built from these
-  byte-fallback tokens.
+* SentencePiece with byte fallback (Mistral v0.3, DictaLM). Normal tokens use the
+  '▁' (U+2581) character to indicate a leading space. For rare or unknown pieces,
+  the tokenizer falls back to explicit byte tokens like '<0xD7>'. Hebrew text is
+  often assembled from these byte-level fallback tokens.
 
-`token_to_bytes` returns the exact bytes a token id contributes (or None if it is
-a structural/special token with no byte content). `is_hebrew_participating` is the
-classifier used to build the Hebrew-allowed set.
+`token_to_bytes` returns the exact byte sequence produced by a token id (or None
+for structural/special tokens that don’t map to text). `is_hebrew_participating`
+is used to decide which tokens can participate in Hebrew generation.
 """
 
 from __future__ import annotations

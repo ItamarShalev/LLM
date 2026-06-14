@@ -1,23 +1,27 @@
 """
-Part 2 - Tokenizers.
+Part 2: Tokenizer Feature & Efficiency Analysis
 
-For each of the ten models, loads the tokenizer and records: type/family, vocab
-size, special-token inventory, the word-boundary strategy, whether it is byte
-level or byte-fallback, and the average number of tokens per word for English and
-Hebrew. Writes outputs/tokenizers.csv.
+Loads the tokenizer for each of the ten target models to profile their underlying architecture 
+and cross-lingual tokenization efficiency. Compiles configuration metrics—including model family, 
+vocabulary size, special token inventories, word-boundary mechanisms, and byte-level/byte-fallback 
+behaviors—and exports the dataset to `outputs/tokenizers.csv`.
 
-Average tokens-per-word method (documented in the report):
-  * Take the fixed prose samples in data/fixtures.py (one English, one Hebrew).
-  * Encode each WITHOUT special tokens.
-  * words = number of whitespace-separated chunks (str.split()).
-  * avg = total_tokens / words.
-  Assumption: a "word" is a whitespace-delimited chunk, so attached punctuation
-  counts with its word. This matches how these languages are normally spaced and
-  keeps the English and Hebrew counts comparable.
+Tokens-Per-Word Benchmarking Methodology:
+To evaluate tokenization overhead across English and Hebrew, the script benchmarks the models 
+against fixed prose samples defined in `data/fixtures.py`:
+1. Input text is tokenized with special/control tokens disabled.
+2. Base word counts are derived using standard whitespace separation (`str.split()`).
+3. The efficiency metric is calculated as: total_tokens / word_count.
+
+Note: Splitting strictly by whitespace includes attached punctuation as part of the tokenized 
+word chunk. This approach aligns with standard linguistic spacing for both targets and ensures 
+the English and Hebrew metric baselines remain directly comparable.
 
 Usage:
     python -m src.part2_tokenizers.analyze_tokenizers
-    HF_TOKEN=... python -m src.part2_tokenizers.analyze_tokenizers   # includes Llama
+    
+    # Required for accessing gated repositories (e.g., Llama architectures)
+    HF_TOKEN=your_token_here python -m src.part2_tokenizers.analyze_tokenizers
 """
 
 from __future__ import annotations

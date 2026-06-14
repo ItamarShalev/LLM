@@ -1,26 +1,20 @@
 """
-Part 3 - Identify Hebrew-related tokens.
+Part 3 - Hebrew Token Isolation for Constrained Decoding.
 
-For each of the two decoding models (Qwen2.5-7B-Instruct, Mistral-7B-Instruct-v0.3)
-we scan the entire vocabulary and keep every token that may participate in Hebrew
-text: tokens whose surface contains a Hebrew character (and no foreign-script
-letter), pure punctuation / digit / whitespace tokens, and byte-fragment tokens
-that fall inside the Hebrew UTF-8 footprint (so Hebrew letters that are split
-across tokens can still be reconstructed). See src/common/token_utils.py for the
-exact rule; the report explains the strategy and its assumptions.
+Filters the full vocabulary matrices of the primary decoding models (Qwen2.5 
+and Mistral) to isolate a subset of tokens eligible for Hebrew generation. 
+The script tracks allowed subwords and exports indices to target JSON manifests.
 
-Writes:
-    outputs/hebrew_allowed_tokens_qwen.json
-    outputs/hebrew_allowed_tokens_mistral.json
+Allowed tokens are identified using the following criteria:
+1. Subwords containing Hebrew characters with no mixed foreign scripts.
+2. Language-neutral punctuation, structural whitespace, and numeric digits.
+3. Raw byte-fragment tokens that map to the Hebrew UTF-8 character footprint, 
+   ensuring that multi-token split characters can be safely reconstructed.
 
-Each file:  {"model_id": "...", "allowed_token_ids": [ ... ]}
-
-Note: the EOS token is intentionally NOT in these files (the files are the pure
-Hebrew-allowed set, as the assignment specifies). The constrained decoder adds
-EOS at run time so generation can terminate; this is documented in the report.
-
-Usage:
-    python -m src.part3_decoding.identify_hebrew_tokens
+Note on Sequence Termination:
+The End-of-Sequence (EOS) control token is excluded from these baseline manifests 
+to maintain a pure language footprint. The constrained decoding framework adds 
+the EOS token dynamically at runtime to allow generation to safely terminate.
 """
 
 from __future__ import annotations

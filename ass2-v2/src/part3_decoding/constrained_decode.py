@@ -6,12 +6,6 @@ masking every other token's logit to -inf before sampling. The allowed set is th
 Hebrew-allowed set from identify_hebrew_tokens.py, plus the EOS token (added here
 so generation can stop) and optionally the pad token.
 
-Implementation note (for the report): masking logits to -inf is the standard,
-model-agnostic way to constrain Hugging Face `generate`. It works with greedy or
-sampling decoding and needs no change to the model weights. We add EOS to the
-allowed mask so the model can terminate; without it, the model would be forced to
-emit Hebrew/punctuation until max_new_tokens.
-
 Usage (programmatic):
     from src.part3_decoding.constrained_decode import build_processor
     lp = build_processor(tokenizer, allowed_ids)        # LogitsProcessorList
